@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LK Sneakers — Compras Internacionais</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:ital,wght@0,300;0,400;0,500&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    tailwind.config = { theme: { extend: { colors: {
+      black:'#0a0a0a', offwhite:'#f5f4f2', warmgray:'#b5b0a8', lightgray:'#e8e6e2',
+      medgray:'#8a8580', darkgray:'#2a2725', redsub:'#c4463a', greensub:'#3a7d44'
+    }, fontFamily: { display:['"Cormorant Garamond"','serif'], body:['"DM Sans"','sans-serif'] } } } }
+  </script>
+  <style>
+    body{font-family:'DM Sans',sans-serif;background:#f5f4f2;color:#0a0a0a}
+    .kicker{font-size:8px;letter-spacing:4px;text-transform:uppercase;color:#b5b0a8}
+    .rule{width:28px;height:1px;background:#e8e6e2}
+    .btn{font-size:10px;letter-spacing:3px;text-transform:uppercase;padding:12px 28px;transition:all .25s}
+    .btn-dark{background:#0a0a0a;color:#fff}.btn-dark:hover{background:#2a2725}
+    .btn-out{border:1px solid #0a0a0a}.btn-out:hover{background:#0a0a0a;color:#fff}
+    .tab{font-size:11px;letter-spacing:2px;text-transform:uppercase;padding:14px 4px;border-bottom:2px solid transparent;color:#8a8580}
+    .tab.active{color:#0a0a0a;border-color:#0a0a0a}
+    /* Semáforo de prazo */
+    .sem-verde   { --c:#3a7d44; --bg:rgba(58,125,68,.10); }
+    .sem-amarelo { --c:#92620a; --bg:rgba(146,98,10,.12); }
+    .sem-vermelho{ --c:#c4463a; --bg:rgba(196,70,58,.12); }
+    .sem-neutro  { --c:#8a8580; --bg:rgba(138,133,128,.10); }
+    .card-sem { border-left:3px solid var(--c, transparent); }
+    .badge-sem{ font-size:8px;letter-spacing:2px;text-transform:uppercase;padding:4px 9px;color:var(--c);background:var(--bg); }
+    .dot{ width:8px;height:8px;border-radius:50%;background:var(--c);display:inline-block; }
+    input,select{font-family:'DM Sans';font-size:13px;border:1px solid #e8e6e2;padding:10px 12px;background:#fff;width:100%}
+    input:focus,select:focus{outline:none;border-color:#0a0a0a}
+    label{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#8a8580;display:block;margin-bottom:5px}
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <!-- HEADER -->
+  <header class="bg-black text-white px-6 md:px-10 py-5 flex items-center justify-between sticky top-0 z-30">
+    <div style="font-weight:500;font-size:18px;letter-spacing:8px;">LK SNEAKERS</div>
+    <div class="kicker" style="color:#b5b0a8">Compras Internacionais</div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 md:px-8 py-10">
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-3 gap-px bg-lightgray border border-lightgray mb-10">
+      <% const labels = {pendente:'Pendente', enviado:'Enviado', entregue:'Entregue'} %>
+      <% for (const [k,v] of Object.entries(resumo)) { %>
+        <a href="/?aba=<%= k %>" class="bg-white p-6 text-center hover:bg-offwhite transition">
+          <div class="font-display text-4xl font-light"><%= v %></div>
+          <div class="kicker mt-2"><%= labels[k] %></div>
+        </a>
+      <% } %>
+    </div>
+
+    <!-- SEMÁFORO DE PRAZO (legenda + contadores) -->
+    <div class="border border-lightgray bg-white mb-10">
+      <div class="px-6 py-3 border-b border-lightgray flex items-center justify-between">
+        <span class="kicker">Prazo desde a compra</span>
+        <span class="text-medgray text-[10px] font-light">não inclui entregues</span>
+      </div>
+      <div class="grid grid-cols-3 divide-x divide-lightgray">
+        <div class="sem-verde p-5 flex items-center gap-3">
+          <span class="dot"></span>
+          <div><div class="font-display text-2xl font-light"><%= resumoSemaforo.verde %></div>
+          <div class="text-[9px] tracking-wider uppercase text-medgray">No prazo · até 2 sem.</div></div>
+        </div>
+        <div class="sem-amarelo p-5 flex items-center gap-3">
+          <span class="dot"></span>
+          <div><div class="font-display text-2xl font-light"><%= resumoSemaforo.amarelo %></div>
+          <div class="text-[9px] tracking-wider uppercase text-medgray">A expirar · 3ª–4ª sem.</div></div>
+        </div>
+        <div class="sem-vermelho p-5 flex items-center gap-3">
+          <span class="dot"></span>
+          <div><div class="font-display text-2xl font-light"><%= resumoSemaforo.vermelho %></div>
+          <div class="text-[9px] tracking-wider uppercase text-medgray">Atrasado · +4 sem.</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-3 mb-8" x-data="{ modal:null }">
+      <button @click="modal='pedido'" class="btn btn-dark">+ Novo Pedido</button>
+      <button @click="modal='lote'" class="btn btn-out">+ Novo Lote</button>
+      <a href="/check-atrasos" class="btn btn-out" style="border-color:#c4463a;color:#c4463a">Verificar Atrasos · E-mail</a>
+
+      <!-- MODAL NOVO PEDIDO -->
+      <div x-show="modal==='pedido'" x-cloak class="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto py-10" @click.self="modal=null">
+        <div class="bg-white max-w-2xl w-full mx-4 p-8" x-data="{ itens:[{}] }">
+          <div class="kicker mb-1">Entrada Manual</div>
+          <h2 class="font-display text-3xl font-light mb-6">Novo <em class="text-warmgray">Pedido</em></h2>
+          <form method="POST" action="/pedidos">
+            <div class="grid grid-cols-2 gap-4 mb-4">
+              <div><label>Loja</label>
+                <select name="loja" required>
+                  <% LOJAS.forEach(l => { %><option><%= l %></option><% }) %>
+                </select></div>
+              <div><label>Nº do Pedido</label><input name="numero_pedido" placeholder="#1234"></div>
+              <div><label>Data da Compra</label><input type="date" name="data_compra"></div>
+              <div class="grid grid-cols-2 gap-2">
+                <div><label>Valor</label><input type="number" step="0.01" name="valor" placeholder="0.00"></div>
+                <div><label>Moeda</label><select name="moeda"><option>USD</option><option>EUR</option><option>BRL</option></select></div>
+              </div>
+            </div>
+
+            <div class="rule my-5"></div>
+            <label>Itens</label>
+            <template x-for="(item,i) in itens" :key="i">
+              <div class="grid grid-cols-12 gap-2 mb-2">
+                <input class="col-span-7" name="item_nome" placeholder="Nome do produto">
+                <input class="col-span-2" name="item_tamanho" placeholder="Tam.">
+                <input class="col-span-2" type="number" name="item_qtd" value="1" min="1">
+                <button type="button" class="col-span-1 text-redsub text-lg" @click="itens.splice(i,1)" x-show="itens.length>1">×</button>
+              </div>
+            </template>
+            <button type="button" class="kicker mt-1" style="color:#0a0a0a" @click="itens.push({})">+ adicionar item</button>
+
+            <div class="flex gap-3 mt-7">
+              <button class="btn btn-dark flex-1">Salvar como Pendente</button>
+              <button type="button" class="btn btn-out" @click="modal=null">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- MODAL NOVO LOTE -->
+      <div x-show="modal==='lote'" x-cloak class="fixed inset-0 bg-black/60 z-50 flex items-start justify-center py-10" @click.self="modal=null">
+        <div class="bg-white max-w-lg w-full mx-4 p-8">
+          <div class="kicker mb-1">Agrupamento de Envio</div>
+          <h2 class="font-display text-3xl font-light mb-6">Novo <em class="text-warmgray">Lote</em></h2>
+          <form method="POST" action="/lotes">
+            <div class="mb-4"><label>Descrição</label><input name="descricao" placeholder="Ex: Envio EUA — Julho/01"></div>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+              <div><label>Transportadora</label><input name="transportadora" placeholder="DHL, FedEx..."></div>
+              <div><label>Cód. Rastreio</label><input name="codigo_rastreio"></div>
+            </div>
+            <div class="mb-6"><label>Data de Envio</label><input type="date" name="data_envio"></div>
+            <div class="flex gap-3">
+              <button class="btn btn-dark flex-1">Criar Lote</button>
+              <button type="button" class="btn btn-out" @click="modal=null">Cancelar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="flex gap-8 border-b border-lightgray mb-8">
+      <% for (const k of ['pendente','enviado','entregue']) { %>
+        <a href="/?aba=<%= k %>" class="tab <%= aba===k?'active':'' %>"><%= labels[k] %></a>
+      <% } %>
+    </div>
+
+    <!-- LISTA DE PEDIDOS -->
+    <% if (pedidos.length === 0) { %>
+      <p class="text-medgray font-light text-sm py-16 text-center">Nenhum pedido nesta aba.</p>
+    <% } %>
+
+    <div class="space-y-px bg-lightgray border border-lightgray">
+    <% pedidos.forEach(p => { %>
+      <div class="bg-white p-5 md:p-6 card-sem sem-<%= p.semaforo.cor %>" x-data="{ open:false }">
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex-1">
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="kicker"><%= p.loja %></span>
+              <% if (p.numero_pedido) { %><span class="text-medgray text-xs">#<%= p.numero_pedido %></span><% } %>
+              <% if (p.semaforo.cor !== 'neutro') { %>
+                <span class="badge-sem sem-<%= p.semaforo.cor %>"><%= p.semaforo.label %><% if (p.semaforo.dias != null) { %> · <%= p.semaforo.dias %>d<% } %></span>
+              <% } %>
+              <% p.alertas.forEach(a => { %>
+                <span class="text-[8px] tracking-wider uppercase px-2 py-1" style="background:rgba(196,70,58,.1);color:#c4463a"><%= a.msg %></span>
+              <% }) %>
+            </div>
+            <div class="font-display text-xl font-light mt-1">
+              <%= p.itens.map(i => i.nome + (i.tamanho ? ' · '+i.tamanho : '')).join(' / ') || 'Sem itens' %>
+            </div>
+            <div class="text-medgray text-xs mt-1 font-light">
+              <%= p.qtd_itens %> <%= p.qtd_itens===1?'item':'itens' %>
+              <% if (p.valor) { %> · <%= p.moeda %> <%= p.valor.toFixed(2) %><% } %>
+              <% if (p.qtd_fotos>0) { %> · <%= p.qtd_fotos %> foto(s)<% } %>
+              <% if (p.lote) { %> · Lote: <%= p.lote.descricao || p.lote.id %><% } %>
+              <span class="ml-1 text-warmgray"><%= p.origem==='email'?'· auto':'' %></span>
+            </div>
+          </div>
+          <button @click="open=!open" class="kicker" style="color:#0a0a0a">Detalhes</button>
+        </div>
+
+        <!-- PAINEL EXPANDIDO -->
+        <div x-show="open" x-cloak class="mt-5 pt-5 border-t border-lightgray">
+          <!-- ITENS + FOTOS -->
+          <div class="grid md:grid-cols-2 gap-4 mb-5">
+            <% p.itens.forEach(it => { %>
+              <div class="flex items-center gap-3 border border-lightgray p-3">
+                <% if (it.foto_url) { %>
+                  <img src="<%= it.foto_url %>" class="w-16 h-16 object-cover" style="background:#f5f4f2">
+                <% } else { %>
+                  <div class="w-16 h-16 flex items-center justify-center text-warmgray text-[8px] tracking-wider uppercase" style="background:#f5f4f2">Sem foto</div>
+                <% } %>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-light truncate"><%= it.nome %></div>
+                  <div class="text-medgray text-xs"><%= it.tamanho || '—' %> · qtd <%= it.qtd %></div>
+                  <% if (p.status==='pendente') { %>
+                    <form method="POST" action="/itens/<%= it.id %>/foto" enctype="multipart/form-data" class="mt-2">
+                      <input type="file" name="foto" accept="image/*" class="text-[10px]" style="border:none;padding:0" onchange="this.form.submit()">
+                    </form>
+                  <% } %>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+
+          <!-- AÇÃO: ENVIAR (só na aba pendente) -->
+          <% if (p.status==='pendente') { %>
+            <form method="POST" action="/pedidos/<%= p.id %>/enviar" class="flex flex-wrap items-end gap-3">
+              <div class="flex-1 min-w-[200px]">
+                <label>Vincular ao Lote (obrigatório)</label>
+                <select name="lote_id" required>
+                  <option value="">Selecione um lote...</option>
+                  <% lotesAtivos.forEach(l => { %>
+                    <option value="<%= l.id %>"><%= l.descricao || l.id %> <%= l.transportadora?'· '+l.transportadora:'' %></option>
+                  <% }) %>
+                </select>
+              </div>
+              <button class="btn btn-dark">Marcar como Enviado →</button>
+            </form>
+            <p class="text-medgray text-[10px] mt-2 font-light">Requer ao menos 1 foto anexada + lote selecionado.</p>
+          <% } %>
+        </div>
+      </div>
+    <% }) %>
+    </div>
+
+    <!-- LOTES (visível na aba enviado) -->
+    <% if (aba==='enviado' && lotes.filter(l=>l.status==='em_transito').length) { %>
+      <div class="mt-12">
+        <div class="kicker mb-1">Em Trânsito</div>
+        <h2 class="font-display text-2xl font-light mb-5">Lotes <em class="text-warmgray">Ativos</em></h2>
+        <div class="space-y-px bg-lightgray border border-lightgray">
+        <% lotes.filter(l=>l.status==='em_transito').forEach(l => { %>
+          <div class="bg-white p-5 flex items-center justify-between gap-4">
+            <div>
+              <div class="font-display text-lg font-light"><%= l.descricao || l.id %></div>
+              <div class="text-medgray text-xs mt-1">
+                <%= l.transportadora || 'sem transportadora' %>
+                <% if(l.codigo_rastreio){ %> · <%= l.codigo_rastreio %><% } %>
+                · <%= l.pedidos.length %> pedido(s)
+              </div>
+            </div>
+            <form method="POST" action="/lotes/<%= l.id %>/entregar"
+                  onsubmit="return confirm('Marcar todos os <%= l.pedidos.length %> pedidos deste lote como entregues?')">
+              <button class="btn btn-out">Lote chegou → Entregue</button>
+            </form>
+          </div>
+        <% }) %>
+        </div>
+      </div>
+    <% } %>
+
+  </main>
+
+  <footer class="bg-black text-warmgray text-center py-8 mt-16">
+    <div class="font-display italic font-light text-sm" style="letter-spacing:1.5px">O que é raro merece ser encontrado.</div>
+  </footer>
+
+  <style>[x-cloak]{display:none!important}</style>
+</body>
+</html>
