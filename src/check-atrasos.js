@@ -5,6 +5,10 @@
 // com o comando:  node src/check-atrasos.js
 import { pedidosAtrasadosNaoAvisados, marcarAvisoEnviado } from './store.js';
 import { enviarAlertaAtraso } from './email.js';
+import { initDb } from './init-db.js';
+
+initDb(); // garante schema (cron pode rodar em container separado)
+
 
 const atrasados = pedidosAtrasadosNaoAvisados();
 
