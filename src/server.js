@@ -5,6 +5,11 @@ import { dirname, join, extname } from 'path';
 import { nanoid } from 'nanoid';
 import * as store from './store.js';
 import { enviarAlertaAtraso } from './email.js';
+import { initDb } from './init-db.js';
+
+// Cria as tabelas e a pasta de uploads no boot (idempotente).
+// Assim o app nunca sobe sem schema — não depende do start command.
+initDb();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
