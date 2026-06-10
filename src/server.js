@@ -46,18 +46,23 @@ app.get('/', (req, res) => {
 });
 
 // ── CRIAR PEDIDO (manual) ──
-app.post('/pedidos', (req, res) => {
+// upload.any() aceita os campos de foto indexados (item_foto_0, item_foto_1...)
+// junto com os campos de texto do formulário
+app.post('/pedidos', upload.any(), (req, res) => {
   const { loja, loja_nova, data_compra, valor, moeda } = req.body;
   // Se o usuário escolheu "Outra" e digitou um nome, usa esse nome
   const lojaFinal = (loja === '__nova__' && loja_nova?.trim()) ? loja_nova.trim() : loja;
   const pid = store.criarPedido({ loja: lojaFinal, data_compra, valor: valor ? parseFloat(valor) : null, moeda });
 
-  // itens vêm como arrays paralelos do form
+  // itens vêm como arrays paralelos do form; fotos casam pelo índice no fieldname
   const nomes = [].concat(req.body.item_nome || []);
   const tams = [].concat(req.body.item_tamanho || []);
   const qtds = [].concat(req.body.item_qtd || []);
   nomes.forEach((nome, i) => {
-    if (nome?.trim()) store.adicionarItem(pid, { nome, tamanho: tams[i], qtd: parseInt(qtds[i]) || 1 });
+    if (!nome?.trim()) return;
+    const itemId = store.adicionarItem(pid, { nome, tamanho: tams[i], qtd: parseInt(qtds[i]) || 1 });
+    const foto = (req.files || []).find(f => f.fieldname === `item_foto_${i}`);
+    if (foto) store.anexarFoto(itemId, '/uploads/' + foto.filename);
   });
   res.redirect('/?aba=pendente');
 });
