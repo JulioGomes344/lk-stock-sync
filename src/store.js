@@ -1,11 +1,27 @@
 import db from './db.js';
 import { nanoid } from 'nanoid';
 
-// Lojas conhecidas — usado no select do formulário e futuramente no parser
-export const LOJAS = [
+// Lojas padrão — sempre aparecem no select
+export const LOJAS_PADRAO = [
   'StockX', 'GOAT', 'Alo Yoga', 'Lululemon',
   'Nude Project', 'Aimé Leon Dore', 'Rhode'
 ];
+
+// Retorna lojas padrão + lojas que o usuário cadastrou na hora (sem duplicar)
+export function listarLojas() {
+  const custom = db.prepare('SELECT nome FROM lojas ORDER BY nome').all().map(r => r.nome);
+  const todas = [...LOJAS_PADRAO];
+  custom.forEach(n => { if (!todas.includes(n)) todas.push(n); });
+  return todas;
+}
+
+// Salva uma loja nova para reaparecer nas próximas vezes
+function registrarLoja(nome) {
+  if (!nome) return;
+  const limpo = nome.trim();
+  if (!limpo || LOJAS_PADRAO.includes(limpo)) return;
+  db.prepare('INSERT OR IGNORE INTO lojas (nome) VALUES (?)').run(limpo);
+}
 
 // Limiares de alerta de perda (em dias)
 // ── SEMÁFORO POR IDADE DO PEDIDO (desde a data da compra) ──
@@ -42,12 +58,19 @@ export function semaforo(pedido) {
 
 // ── PEDIDOS ──
 
-export function criarPedido({ loja, numero_pedido, data_compra, valor, moeda, origem = 'manual', email_id = null }) {
+export function criarPedido({ loja, data_compra, valor, moeda, origem = 'manual', email_id = null }) {
   const id = nanoid(10);
+  registrarLoja(loja); // se for loja nova, guarda para próximas vezes
+
+  // Número sequencial global automático: maior seq atual + 1
+  const { max } = db.prepare('SELECT MAX(seq) AS max FROM pedidos').get();
+  const seq = (max || 0) + 1;
+  const numero_pedido = String(seq).padStart(4, '0'); // 0001, 0002, ...
+
   db.prepare(`
-    INSERT INTO pedidos (id, loja, numero_pedido, data_compra, valor, moeda, origem, email_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, loja, numero_pedido || null, data_compra || null, valor || null, moeda || 'USD', origem, email_id);
+    INSERT INTO pedidos (id, seq, loja, numero_pedido, data_compra, valor, moeda, origem, email_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, seq, loja, numero_pedido, data_compra || null, valor || null, moeda || 'USD', origem, email_id);
   return id;
 }
 
