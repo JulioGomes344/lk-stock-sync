@@ -1,5 +1,6 @@
 import express from 'express';
 import multer from 'multer';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join, extname } from 'path';
 import { nanoid } from 'nanoid';
@@ -33,12 +34,12 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 
 // ── DASHBOARD (3 abas) ──
 app.get('/', (req, res) => {
-  const aba = ['pendente', 'enviado', 'entregue'].includes(req.query.aba) ? req.query.aba : 'pendente';
+  const aba = ['pendente', 'enviado', 'entregue', 'lixeira'].includes(req.query.aba) ? req.query.aba : 'pendente';
   res.render('dashboard', {
     aba,
     resumo: store.resumo(),
     resumoSemaforo: store.resumoSemaforo(),
-    pedidos: store.listarPorStatus(aba),
+    pedidos: aba === 'lixeira' ? store.listarLixeira() : store.listarPorStatus(aba),
     lotes: store.listarLotesComPedidos(),
     lotesAtivos: store.listarLotesAtivos(),
     LOJAS: store.listarLojas()
@@ -118,6 +119,39 @@ app.get('/check-atrasos', async (req, res) => {
     msg = `Encontrei ${atrasados.length} pedido(s) atrasado(s), mas o envio do e-mail falhou (${r.erro}). Os pedidos NÃO foram marcados como avisados — tente de novo após ajustar o SMTP.`;
   }
   res.render('erro', { msg });
+});
+
+// ── LIXEIRA ──
+// Senha para exclusão definitiva: variável DELETE_PASSWORD no Railway.
+// Sem ela configurada, a exclusão definitiva fica bloqueada por segurança.
+
+app.post('/pedidos/:id/excluir', (req, res) => {
+  store.moverParaLixeira(req.params.id);
+  res.redirect('/?aba=lixeira');
+});
+
+app.post('/pedidos/:id/restaurar', (req, res) => {
+  store.restaurarDaLixeira(req.params.id);
+  res.redirect('/?aba=lixeira');
+});
+
+app.post('/pedidos/:id/excluir-definitivo', (req, res) => {
+  const senhaConfigurada = process.env.DELETE_PASSWORD;
+  if (!senhaConfigurada) {
+    return res.status(400).render('erro', {
+      msg: 'A exclusão definitiva está bloqueada: configure a variável DELETE_PASSWORD no Railway para habilitá-la.'
+    });
+  }
+  if (req.body.senha !== senhaConfigurada) {
+    return res.status(403).render('erro', { msg: 'Senha incorreta. O pedido permanece na lixeira.' });
+  }
+  const fotos = store.excluirDefinitivo(req.params.id);
+  // apaga também os arquivos de foto locais do pedido
+  for (const f of fotos) {
+    const caminho = join(UPLOAD_DIR, f.replace('/uploads/', ''));
+    fs.unlink(caminho, () => {}); // ignora se já não existir
+  }
+  res.redirect('/?aba=lixeira');
 });
 
 const PORT = process.env.PORT || 3000;
