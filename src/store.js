@@ -58,7 +58,7 @@ export function semaforo(pedido) {
 
 // ── PEDIDOS ──
 
-export function criarPedido({ loja, data_compra, valor, moeda, origem = 'manual', email_id = null }) {
+export function criarPedido({ loja, data_compra, valor, moeda, origem = 'manual', email_id = null, pedido_loja = null }) {
   const id = nanoid(10);
   registrarLoja(loja); // se for loja nova, guarda para próximas vezes
 
@@ -68,9 +68,9 @@ export function criarPedido({ loja, data_compra, valor, moeda, origem = 'manual'
   const numero_pedido = String(seq).padStart(4, '0'); // 0001, 0002, ...
 
   db.prepare(`
-    INSERT INTO pedidos (id, seq, loja, numero_pedido, data_compra, valor, moeda, origem, email_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, seq, loja, numero_pedido, data_compra || null, valor || null, moeda || 'USD', origem, email_id);
+    INSERT INTO pedidos (id, seq, loja, numero_pedido, pedido_loja, data_compra, valor, moeda, origem, email_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, seq, loja, numero_pedido, pedido_loja, data_compra || null, valor || null, moeda || 'USD', origem, email_id);
   return id;
 }
 
@@ -225,4 +225,27 @@ export function excluirDefinitivo(pedido_id) {
   ).all(pedido_id).map(r => r.foto_url);
   db.prepare('DELETE FROM pedidos WHERE id = ?').run(pedido_id);
   return fotos;
+}
+
+// ── INTEGRAÇÃO GMAIL: deduplicação ──
+// Um e-mail (Message-ID) ou um pedido da loja só entram uma vez.
+export function emailJaProcessado(message_id) {
+  return !!db.prepare('SELECT 1 FROM pedidos WHERE email_id = ?').get(message_id);
+}
+export function pedidoLojaJaExiste(loja, pedido_loja) {
+  if (!pedido_loja) return false;
+  return !!db.prepare('SELECT 1 FROM pedidos WHERE loja = ? AND pedido_loja = ?').get(loja, pedido_loja);
+}
+
+// Anexa foto a todos os itens SEM foto de um pedido identificado pelo nº da loja.
+// Usado pelo enriquecimento via e-mails de envio (StockX Shipped/Delivered).
+export function anexarFotoPorPedidoLoja(loja, pedido_loja, foto_url) {
+  if (!pedido_loja || !foto_url) return 0;
+  const pedido = db.prepare('SELECT id FROM pedidos WHERE loja = ? AND pedido_loja = ?').get(loja, pedido_loja);
+  if (!pedido) return 0;
+  const r = db.prepare(`
+    UPDATE itens SET foto_url = ?, foto_recebida_em = datetime('now')
+    WHERE pedido_id = ? AND foto_url IS NULL
+  `).run(foto_url, pedido.id);
+  return r.changes;
 }
