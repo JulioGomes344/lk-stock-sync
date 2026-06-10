@@ -84,6 +84,7 @@
       <button @click="modal='pedido'" class="btn btn-dark">+ Novo Pedido</button>
       <button @click="modal='lote'" class="btn btn-out">+ Novo Lote</button>
       <a href="/check-atrasos" class="btn btn-out" style="border-color:#c4463a;color:#c4463a">Verificar Atrasos · E-mail</a>
+      <a href="/sync-gmail" class="btn btn-out">Sincronizar Gmail</a>
 
       <!-- MODAL NOVO PEDIDO -->
       <div x-show="modal==='pedido'" x-cloak class="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto py-10" @click.self="modal=null">
@@ -231,6 +232,7 @@
           <div class="flex flex-wrap gap-x-8 gap-y-2 mb-5">
             <div><div class="kicker">Nº do Pedido</div><div class="text-sm font-light mt-1">#<%= p.numero_pedido %></div></div>
             <div><div class="kicker">Loja</div><div class="text-sm font-light mt-1"><%= p.loja %></div></div>
+            <% if (p.pedido_loja) { %><div><div class="kicker">Nº na Loja</div><div class="text-sm font-light mt-1">#<%= p.pedido_loja %></div></div><% } %>
             <div><div class="kicker">Data da Compra</div><div class="text-sm font-light mt-1"><%= p.data_compra || '—' %></div></div>
             <% if (p.valor) { %><div><div class="kicker">Valor</div><div class="text-sm font-light mt-1"><%= p.moeda %> <%= p.valor.toFixed(2) %></div></div><% } %>
           </div>
