@@ -17,18 +17,55 @@ const FROM = process.env.ALERT_FROM || 'LK Sneakers <contato@lksneakers.com.br>'
 const TO = (process.env.ALERT_TO || 'contato@lksneakers.com.br')
   .split(',').map(e => e.trim()).filter(Boolean);
 
+// URL pública do app — usada para transformar fotos locais (/uploads/...) em
+// links absolutos que funcionam dentro do e-mail.
+// Railway injeta RAILWAY_PUBLIC_DOMAIN automaticamente; APP_URL tem prioridade se definida.
+const APP_URL = (process.env.APP_URL
+  || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : ''))
+  .replace(/\/$/, '');
+
+// Foto do parser (URL completa da loja) passa direto; foto local ganha o domínio do app.
+function urlAbsoluta(foto) {
+  if (!foto) return null;
+  if (/^https?:\/\//i.test(foto)) return foto;
+  return APP_URL ? APP_URL + foto : null; // sem APP_URL, omite a foto local
+}
+
 const LOGO_BRANCO = 'https://lksneakers.com.br/cdn/shop/files/LOGO-LK-BRANCO_885e01ed-68da-4988-b5a2-4ff4a10e238b.png?v=1763660281';
 
 // Monta o HTML do alerta seguindo a identidade LK (fundo escuro, Cormorant + DM Sans).
 function montarHtml(pedidos) {
   const linhas = pedidos.map(p => {
-    const itens = p.itens.map(i => i.nome + (i.tamanho ? ' · ' + i.tamanho : '')).join(' / ') || 'Sem itens';
+    const statusLabel = p.status === 'enviado' ? 'Já enviado · em trânsito' : 'Ainda não enviado';
+    const statusCor = p.status === 'enviado' ? '#b5b0a8' : '#c4463a';
+
+    // Itens: miniatura quando houver foto (do parser ou do upload manual)
+    const itensHtml = p.itens.map(i => {
+      const foto = urlAbsoluta(i.foto_url);
+      const nome = i.nome + (i.tamanho ? ' · ' + i.tamanho : '') + (i.qtd > 1 ? ' · x' + i.qtd : '');
+      return `
+        <table cellpadding="0" cellspacing="0" style="margin-top:8px;"><tr>
+          ${foto ? `<td style="padding-right:10px;vertical-align:middle;">
+            <img src="${foto}" width="44" height="44" alt="" style="display:block;width:44px;height:44px;object-fit:cover;background:#1a1a1a;border:1px solid rgba(255,255,255,0.08);">
+          </td>` : ''}
+          <td style="vertical-align:middle;">
+            <div style="font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:17px;color:#ffffff;">${nome}</div>
+          </td>
+        </tr></table>`;
+    }).join('');
+
     return `
       <tr>
-        <td style="padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
+        <td style="padding:16px 0;border-bottom:1px solid rgba(255,255,255,0.08);">
           <div style="font-family:'DM Sans',Arial,sans-serif;font-size:8px;letter-spacing:3px;text-transform:uppercase;color:#b5b0a8;">${p.loja}${p.numero_pedido ? ' · #' + p.numero_pedido : ''}</div>
-          <div style="font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:18px;color:#ffffff;margin-top:3px;">${itens}</div>
-          <div style="font-family:'DM Sans',Arial,sans-serif;font-size:11px;color:#c4463a;margin-top:4px;">Atrasado · ${p.semaforo.dias} dias desde a compra</div>
+          ${itensHtml}
+          <div style="font-family:'DM Sans',Arial,sans-serif;font-size:11px;color:#b5b0a8;margin-top:8px;">
+            Compra: ${p.data_compra || 'sem data'}${p.valor ? ` · ${p.moeda} ${p.valor.toFixed(2)}` : ''}
+          </div>
+          <div style="font-family:'DM Sans',Arial,sans-serif;font-size:11px;margin-top:3px;">
+            <span style="color:#c4463a;">Atrasado · ${p.semaforo.dias} dias desde a compra</span>
+            <span style="color:${statusCor};"> · ${statusLabel}</span>
+          </div>
         </td>
       </tr>`;
   }).join('');
