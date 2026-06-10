@@ -15,7 +15,7 @@
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import * as store from './store.js';
-import { identificarLoja, parsearEmail, REMETENTES, urlFotoStockX, parseEnvioStockX } from './parsers.js';
+import { identificarLoja, parsearEmail, ehConfirmacao, extrairNumeroPedidoGenerico, DOMINIOS, urlFotoStockX, parseEnvioStockX } from './parsers.js';
 
 const USER = process.env.GMAIL_USER;
 const PASS = process.env.GMAIL_APP_PASSWORD;
@@ -67,7 +67,7 @@ export async function sincronizarGmail() {
     const lock = await client.getMailboxLock(caixa);
     try {
       // busca por remetente, um de cada vez (OR composto no IMAP é frágil)
-      for (const remetente of Object.keys(REMETENTES)) {
+      for (const remetente of Object.keys(DOMINIOS)) {
         const uids = await client.search({ from: remetente, since: desde });
         if (!uids || !uids.length) continue;
 
@@ -94,7 +94,22 @@ export async function sincronizarGmail() {
               }
             }
 
-            const dados = parsearEmail(loja, { subject: mail.subject, html: mail.html, text: mail.text });
+            let dados = parsearEmail(loja, { subject: mail.subject, html: mail.html, text: mail.text });
+
+            // ── FALLBACK DE GARANTIA ──
+            // É da loja + parece confirmação + parser detalhado falhou?
+            // Registra um pendente mínimo em vez de perder a compra.
+            if (!dados && ehConfirmacao(loja, mail.subject)) {
+              const numGenerico = extrairNumeroPedidoGenerico(mail.subject, mail.html);
+              dados = {
+                pedido_loja: numGenerico,
+                itens: [{ nome: '⚠ Conferir e-mail — itens não extraídos automaticamente', tamanho: null, qtd: 1, foto_url: null }],
+                valor: null,
+                moeda: 'USD',
+                _fallback: true
+              };
+              console.log(`⚠ [gmail] fallback: confirmação ${loja} ${numGenerico ? '#'+numGenerico : '(sem nº)'} registrada sem detalhes — conferir manualmente`);
+            }
             if (!dados) { resultado.ignorados++; continue; } // marketing, envio, etc.
 
             // StockX: tenta construir a URL da foto a partir do nome (validada antes de salvar)
