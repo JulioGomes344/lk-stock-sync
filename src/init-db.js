@@ -19,6 +19,11 @@ export function initDb() {
   fs.mkdirSync(uploadDir, { recursive: true });
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS lojas (
+      nome      TEXT PRIMARY KEY,
+      criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS lotes (
       id              TEXT PRIMARY KEY,
       descricao       TEXT,
@@ -31,6 +36,7 @@ export function initDb() {
 
     CREATE TABLE IF NOT EXISTS pedidos (
       id            TEXT PRIMARY KEY,
+      seq           INTEGER UNIQUE,                   -- número sequencial automático (#1, #2, ...)
       loja          TEXT NOT NULL,
       numero_pedido TEXT,
       data_compra   TEXT,
@@ -57,7 +63,59 @@ export function initDb() {
     );
   `);
 
+  migrar();
   console.log('✓ Schema criado / verificado');
+}
+
+// ─────────────────────────────────────────────────────────────
+// MIGRAÇÃO AUTOMÁTICA
+// CREATE TABLE IF NOT EXISTS não adiciona colunas novas a tabelas
+// que já existem. Esta função compara as colunas esperadas com as
+// reais (via PRAGMA table_info) e faz ALTER TABLE só do que falta.
+// Roda toda vez, é idempotente e nunca apaga dados.
+// Para mudanças futuras de schema, basta adicionar a linha aqui.
+// ─────────────────────────────────────────────────────────────
+function migrar() {
+  // colunas esperadas por tabela → definição SQL para o ALTER
+  const esperado = {
+    pedidos: {
+      seq: 'INTEGER',
+      aviso_atraso_em: 'TEXT'
+    },
+    itens: {
+      foto_recebida_em: 'TEXT'
+    },
+    lotes: {
+      codigo_rastreio: 'TEXT'
+    }
+  };
+
+  for (const [tabela, colunas] of Object.entries(esperado)) {
+    const existentes = db.prepare(`PRAGMA table_info(${tabela})`).all().map(c => c.name);
+    for (const [coluna, tipo] of Object.entries(colunas)) {
+      if (!existentes.includes(coluna)) {
+        db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${tipo}`);
+        console.log(`  ↳ migração: coluna ${tabela}.${coluna} adicionada`);
+      }
+    }
+  }
+
+  // Preenche seq para pedidos antigos que não tinham número sequencial,
+  // respeitando a ordem de criação. Roda uma única vez (só onde seq é nulo).
+  const semSeq = db.prepare(`SELECT id FROM pedidos WHERE seq IS NULL ORDER BY criado_em`).all();
+  if (semSeq.length) {
+    const { max } = db.prepare(`SELECT MAX(seq) AS max FROM pedidos WHERE seq IS NOT NULL`).get();
+    let n = (max || 0);
+    const upd = db.prepare(`UPDATE pedidos SET seq = ?, numero_pedido = ? WHERE id = ?`);
+    const tx = db.transaction(() => {
+      for (const p of semSeq) {
+        n += 1;
+        upd.run(n, String(n).padStart(4, '0'), p.id);
+      }
+    });
+    tx();
+    console.log(`  ↳ migração: ${semSeq.length} pedido(s) antigo(s) numerado(s) sequencialmente`);
+  }
 }
 
 // Permite rodar direto: `node src/init-db.js` ou `npm run init-db`
