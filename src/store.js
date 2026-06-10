@@ -111,7 +111,7 @@ function enriquecer(pedido) {
 }
 
 export function listarPorStatus(status) {
-  const rows = db.prepare('SELECT * FROM pedidos WHERE status = ? ORDER BY criado_em DESC').all(status);
+  const rows = db.prepare('SELECT * FROM pedidos WHERE status = ? AND excluido_em IS NULL ORDER BY criado_em DESC').all(status);
   return rows.map(enriquecer);
 }
 
@@ -147,7 +147,7 @@ export function listarLotesAtivos() {
 export function listarLotesComPedidos() {
   const lotes = db.prepare('SELECT * FROM lotes ORDER BY criado_em DESC').all();
   return lotes.map(l => {
-    l.pedidos = db.prepare('SELECT * FROM pedidos WHERE lote_id = ?').all(l.id).map(enriquecer);
+    l.pedidos = db.prepare('SELECT * FROM pedidos WHERE lote_id = ? AND excluido_em IS NULL').all(l.id).map(enriquecer);
     return l;
   });
 }
@@ -171,7 +171,7 @@ export function anexarFoto(item_id, foto_url) {
 export function resumo() {
   const r = {};
   for (const s of ['pendente', 'enviado', 'entregue']) {
-    r[s] = db.prepare('SELECT COUNT(*) c FROM pedidos WHERE status = ?').get(s).c;
+    r[s] = db.prepare('SELECT COUNT(*) c FROM pedidos WHERE status = ? AND excluido_em IS NULL').get(s).c;
   }
   return r;
 }
@@ -180,7 +180,7 @@ export function resumo() {
 export function pedidosAtrasadosNaoAvisados() {
   const rows = db.prepare(`
     SELECT * FROM pedidos
-    WHERE status != 'entregue' AND aviso_atraso_em IS NULL
+    WHERE status != 'entregue' AND aviso_atraso_em IS NULL AND excluido_em IS NULL
   `).all();
   return rows
     .map(enriquecer)
@@ -193,8 +193,36 @@ export function marcarAvisoEnviado(pedido_id) {
 
 // Conta por cor — usado nos KPIs do topo
 export function resumoSemaforo() {
-  const rows = db.prepare(`SELECT * FROM pedidos WHERE status != 'entregue'`).all().map(enriquecer);
+  const rows = db.prepare(`SELECT * FROM pedidos WHERE status != 'entregue' AND excluido_em IS NULL`).all().map(enriquecer);
   const r = { verde: 0, amarelo: 0, vermelho: 0 };
   rows.forEach(p => r[p.semaforo.cor]++);
   return r;
+}
+
+// ── LIXEIRA ──
+// Nada é apagado de verdade ao "excluir": o pedido vai para a lixeira
+// (excluido_em preenchido) e some das abas, contadores e alertas.
+// A exclusão definitiva (com senha, validada no server) é que remove do banco.
+
+export function moverParaLixeira(pedido_id) {
+  db.prepare(`UPDATE pedidos SET excluido_em = datetime('now') WHERE id = ?`).run(pedido_id);
+}
+
+export function restaurarDaLixeira(pedido_id) {
+  db.prepare(`UPDATE pedidos SET excluido_em = NULL WHERE id = ?`).run(pedido_id);
+}
+
+export function listarLixeira() {
+  const rows = db.prepare(`SELECT * FROM pedidos WHERE excluido_em IS NOT NULL ORDER BY excluido_em DESC`).all();
+  return rows.map(enriquecer);
+}
+
+// Exclusão definitiva: remove pedido + itens (CASCADE) e devolve as fotos locais
+// para o chamador apagar os arquivos do disco.
+export function excluirDefinitivo(pedido_id) {
+  const fotos = db.prepare(
+    `SELECT foto_url FROM itens WHERE pedido_id = ? AND foto_url LIKE '/uploads/%'`
+  ).all(pedido_id).map(r => r.foto_url);
+  db.prepare('DELETE FROM pedidos WHERE id = ?').run(pedido_id);
+  return fotos;
 }
