@@ -52,7 +52,19 @@ export async function sincronizarGmail() {
 
   try {
     await client.connect();
-    const lock = await client.getMailboxLock('INBOX');
+
+    // Busca em "Todos os e-mails" (cobre arquivados/etiquetados), não só na INBOX.
+    // O nome da pasta varia com o idioma da conta ("All Mail", "Todos os e-mails"),
+    // então localizamos pelo atributo especial \All do Gmail. Fallback: INBOX.
+    let caixa = 'INBOX';
+    try {
+      const pastas = await client.list();
+      const allMail = pastas.find(p => p.specialUse === '\\All');
+      if (allMail) caixa = allMail.path;
+    } catch { /* mantém INBOX */ }
+    console.log(`[gmail] buscando na pasta: ${caixa}`);
+
+    const lock = await client.getMailboxLock(caixa);
     try {
       // busca por remetente, um de cada vez (OR composto no IMAP é frágil)
       for (const remetente of Object.keys(REMETENTES)) {
