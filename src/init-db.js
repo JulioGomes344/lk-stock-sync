@@ -39,6 +39,7 @@ export function initDb() {
       seq           INTEGER UNIQUE,                   -- número sequencial automático (#1, #2, ...)
       loja          TEXT NOT NULL,
       numero_pedido TEXT,
+      pedido_loja   TEXT,                              -- nº do pedido NA LOJA (ex: #1420648, 03-EBHH99EL1N)
       data_compra   TEXT,
       valor         REAL,
       moeda         TEXT DEFAULT 'USD',
@@ -81,6 +82,7 @@ function migrar() {
   const esperado = {
     pedidos: {
       seq: 'INTEGER',
+      pedido_loja: 'TEXT',
       aviso_atraso_em: 'TEXT',
       excluido_em: 'TEXT'
     },
