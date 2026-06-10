@@ -160,11 +160,12 @@
       <% for (const k of ['pendente','enviado','entregue']) { %>
         <a href="/?aba=<%= k %>" class="tab <%= aba===k?'active':'' %>"><%= labels[k] %></a>
       <% } %>
+      <a href="/?aba=lixeira" class="tab <%= aba==='lixeira'?'active':'' %>" style="margin-left:auto;<%= aba==='lixeira'?'':'color:#b5b0a8' %>">Lixeira</a>
     </div>
 
     <!-- LISTA DE PEDIDOS -->
     <% if (pedidos.length === 0) { %>
-      <p class="text-medgray font-light text-sm py-16 text-center">Nenhum pedido nesta aba.</p>
+      <p class="text-medgray font-light text-sm py-16 text-center"><%= aba==='lixeira' ? 'A lixeira está vazia.' : 'Nenhum pedido nesta aba.' %></p>
     <% } %>
 
     <div class="space-y-px bg-lightgray border border-lightgray">
@@ -193,8 +194,36 @@
               <span class="ml-1 text-warmgray"><%= p.origem==='email'?'· auto':'' %></span>
             </div>
           </div>
-          <button @click="open=!open" class="kicker" style="color:#0a0a0a">Detalhes</button>
+          <div class="flex items-center gap-4">
+            <button @click="open=!open" class="kicker" style="color:#0a0a0a">Detalhes</button>
+            <% if (aba !== 'lixeira') { %>
+              <form method="POST" action="/pedidos/<%= p.id %>/excluir"
+                    onsubmit="return confirm('Mover o pedido #<%= p.numero_pedido %> para a lixeira?')">
+                <button class="kicker" style="color:#c4463a">Excluir</button>
+              </form>
+            <% } %>
+          </div>
         </div>
+
+        <% if (aba === 'lixeira') { %>
+          <!-- AÇÕES DA LIXEIRA -->
+          <div class="mt-4 pt-4 border-t border-lightgray flex flex-wrap items-center gap-3" x-data="{ confirmar:false }">
+            <span class="text-medgray text-[10px] font-light">Na lixeira desde <%= (p.excluido_em || '').slice(0,16) %></span>
+            <form method="POST" action="/pedidos/<%= p.id %>/restaurar" class="ml-auto">
+              <button class="btn btn-out">Restaurar</button>
+            </form>
+            <button type="button" class="btn btn-out" style="border-color:#c4463a;color:#c4463a"
+                    x-show="!confirmar" @click="confirmar=true">Excluir definitivamente</button>
+            <form method="POST" action="/pedidos/<%= p.id %>/excluir-definitivo"
+                  x-show="confirmar" x-cloak class="flex items-center gap-2"
+                  onsubmit="return confirm('ATENÇÃO: exclusão definitiva. Não há como recuperar. Continuar?')">
+              <input type="password" name="senha" placeholder="Senha" required
+                     class="!w-36" style="border-color:#c4463a">
+              <button class="btn btn-dark" style="background:#c4463a">Confirmar exclusão</button>
+              <button type="button" class="kicker" @click="confirmar=false">cancelar</button>
+            </form>
+          </div>
+        <% } %>
 
         <!-- PAINEL EXPANDIDO -->
         <div x-show="open" x-cloak class="mt-5 pt-5 border-t border-lightgray">
@@ -217,7 +246,7 @@
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-light truncate"><%= it.nome %></div>
                   <div class="text-medgray text-xs"><%= it.tamanho || '—' %> · qtd <%= it.qtd %></div>
-                  <% if (p.status!=='entregue') { %>
+                  <% if (p.status!=='entregue' && aba!=='lixeira') { %>
                     <form method="POST" action="/itens/<%= it.id %>/foto" enctype="multipart/form-data" class="mt-2">
                       <input type="file" name="foto" accept="image/*" class="text-[10px]" style="border:none;padding:0" onchange="this.form.submit()">
                     </form>
@@ -228,7 +257,7 @@
           </div>
 
           <!-- AÇÃO: ENVIAR (só na aba pendente) -->
-          <% if (p.status==='pendente') { %>
+          <% if (p.status==='pendente' && aba!=='lixeira') { %>
             <form method="POST" action="/pedidos/<%= p.id %>/enviar" class="flex flex-wrap items-end gap-3">
               <div class="flex-1 min-w-[200px]">
                 <label>Vincular ao Lote (obrigatório)</label>
