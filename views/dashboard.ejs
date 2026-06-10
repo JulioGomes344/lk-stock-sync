@@ -91,7 +91,7 @@
           <div class="kicker mb-1">Entrada Manual</div>
           <h2 class="font-display text-3xl font-light mb-6">Novo <em class="text-warmgray">Pedido</em></h2>
           <p class="text-medgray text-xs font-light -mt-4 mb-5">O número do pedido é gerado automaticamente.</p>
-          <form method="POST" action="/pedidos">
+          <form method="POST" action="/pedidos" enctype="multipart/form-data">
             <div class="grid grid-cols-2 gap-4 mb-4">
               <div><label>Loja</label>
                 <select name="loja" x-model="lojaSel" required>
@@ -110,11 +110,18 @@
             <div class="rule my-5"></div>
             <label>Itens</label>
             <template x-for="(item,i) in itens" :key="i">
-              <div class="grid grid-cols-12 gap-2 mb-2">
-                <input class="col-span-7" name="item_nome" placeholder="Nome do produto">
-                <input class="col-span-2" name="item_tamanho" placeholder="Tam.">
-                <input class="col-span-2" type="number" name="item_qtd" value="1" min="1">
-                <button type="button" class="col-span-1 text-redsub text-lg" @click="itens.splice(i,1)" x-show="itens.length>1">×</button>
+              <div class="mb-3">
+                <div class="grid grid-cols-12 gap-2">
+                  <input class="col-span-7" name="item_nome" placeholder="Nome do produto">
+                  <input class="col-span-2" name="item_tamanho" placeholder="Tam.">
+                  <input class="col-span-2" type="number" name="item_qtd" value="1" min="1">
+                  <button type="button" class="col-span-1 text-redsub text-lg" @click="itens.splice(i,1)" x-show="itens.length>1">×</button>
+                </div>
+                <div class="mt-1 flex items-center gap-2">
+                  <span class="text-[8px] tracking-wider uppercase text-medgray">Foto (opcional)</span>
+                  <input type="file" :name="'item_foto_'+i" accept="image/*"
+                         class="text-[10px] flex-1" style="border:none;padding:0;background:transparent">
+                </div>
               </div>
             </template>
             <button type="button" class="kicker mt-1" style="color:#0a0a0a" @click="itens.push({})">+ adicionar item</button>
@@ -210,7 +217,7 @@
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-light truncate"><%= it.nome %></div>
                   <div class="text-medgray text-xs"><%= it.tamanho || '—' %> · qtd <%= it.qtd %></div>
-                  <% if (p.status==='pendente') { %>
+                  <% if (p.status!=='entregue') { %>
                     <form method="POST" action="/itens/<%= it.id %>/foto" enctype="multipart/form-data" class="mt-2">
                       <input type="file" name="foto" accept="image/*" class="text-[10px]" style="border:none;padding:0" onchange="this.form.submit()">
                     </form>
