@@ -41,14 +41,16 @@ app.get('/', (req, res) => {
     pedidos: store.listarPorStatus(aba),
     lotes: store.listarLotesComPedidos(),
     lotesAtivos: store.listarLotesAtivos(),
-    LOJAS: store.LOJAS
+    LOJAS: store.listarLojas()
   });
 });
 
 // ── CRIAR PEDIDO (manual) ──
 app.post('/pedidos', (req, res) => {
-  const { loja, numero_pedido, data_compra, valor, moeda } = req.body;
-  const pid = store.criarPedido({ loja, numero_pedido, data_compra, valor: valor ? parseFloat(valor) : null, moeda });
+  const { loja, loja_nova, data_compra, valor, moeda } = req.body;
+  // Se o usuário escolheu "Outra" e digitou um nome, usa esse nome
+  const lojaFinal = (loja === '__nova__' && loja_nova?.trim()) ? loja_nova.trim() : loja;
+  const pid = store.criarPedido({ loja: lojaFinal, data_compra, valor: valor ? parseFloat(valor) : null, moeda });
 
   // itens vêm como arrays paralelos do form
   const nomes = [].concat(req.body.item_nome || []);
