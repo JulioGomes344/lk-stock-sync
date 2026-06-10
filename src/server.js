@@ -156,3 +156,28 @@ app.post('/pedidos/:id/excluir-definitivo', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✓ LK Compras rodando em http://localhost:${PORT}`));
+
+// ── CRON INTERNO: verificação automática de atrasos ──
+// Roda no boot e depois a cada 1 hora. Seguro contra spam: cada pedido só é
+// avisado uma vez (aviso_atraso_em), então as checagens repetidas não reenviam.
+// Sem necessidade de serviço cron separado nem Volume compartilhado no Railway.
+const UMA_HORA = 60 * 60 * 1000;
+
+async function verificarAtrasosAutomatico() {
+  try {
+    const atrasados = store.pedidosAtrasadosNaoAvisados();
+    if (!atrasados.length) return;
+    const r = await enviarAlertaAtraso(atrasados);
+    if (r.enviado || r.dryRun) {
+      atrasados.forEach(p => store.marcarAvisoEnviado(p.id));
+      console.log(`✓ [cron] ${atrasados.length} pedido(s) atrasado(s) avisado(s) por e-mail.`);
+    } else {
+      console.error(`✗ [cron] envio falhou (${r.erro}) — tentará de novo na próxima hora.`);
+    }
+  } catch (e) {
+    console.error('✗ [cron] erro na verificação de atrasos:', e.message);
+  }
+}
+
+setTimeout(verificarAtrasosAutomatico, 30 * 1000); // 30s após o boot
+setInterval(verificarAtrasosAutomatico, UMA_HORA);  // depois, a cada hora
