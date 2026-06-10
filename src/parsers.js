@@ -9,27 +9,50 @@ const decode = (s) => (s || '')
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\u00a0/g, ' ')
   .trim();
 
-// ── Remetentes conhecidos → loja ──
-export const REMETENTES = {
-  'help@nude-project.com':   'Nude Project',
-  'orders@aimeleondore.com': 'Aimé Leon Dore',
-  'noreply@stockx.com':      'StockX'
+// ── Domínios conhecidos → loja ──
+// Matching por DOMÍNIO (não endereço exato): qualquer remetente @stockx.com
+// é StockX, mesmo que a loja troque o prefixo (noreply@, orders@, no-reply@...).
+export const DOMINIOS = {
+  'nude-project.com':  'Nude Project',
+  'aimeleondore.com':  'Aimé Leon Dore',
+  'stockx.com':        'StockX'
 };
+// compat: usado pelo gmail.js para montar as buscas IMAP
+export const REMETENTES = Object.fromEntries(Object.entries(DOMINIOS).map(([d, l]) => [d, l]));
 
 export function identificarLoja(fromAddress) {
   const addr = (fromAddress || '').toLowerCase();
-  for (const [email, loja] of Object.entries(REMETENTES)) {
-    if (addr.includes(email)) return loja;
+  for (const [dominio, loja] of Object.entries(DOMINIOS)) {
+    if (addr.endsWith('@' + dominio) || addr.includes('@' + dominio + '>') || addr.includes(dominio)) return loja;
   }
   return null;
 }
 
 // ── É confirmação de pedido? (filtra envio, marketing, etc.) ──
-function ehConfirmacao(loja, subject) {
+// Exportada para o fallback de garantia no gmail.js.
+// Palavras-chave amplas: pega variações de texto que as lojas possam adotar.
+export function ehConfirmacao(loja, subject) {
   const s = (subject || '').toLowerCase();
-  if (loja === 'StockX') return s.includes('order confirmed');
-  // Shopify (Nude, ALD): "Order #1234 confirmed"
-  return /order\s*#?\d+\s*confirmed/i.test(subject || '');
+  const padroes = [
+    /order\s*(#?\d+\s*)?confirmed/,   // "Order Confirmed", "Order #123 confirmed"
+    /your order is confirmed/,
+    /order confirmation/,
+    /thank you for your (order|purchase)/,
+    /pedido\s*(#?\d+\s*)?confirmado/,  // versões em português
+    /confirma[çc][ãa]o d[eo] pedido/
+  ];
+  // nunca tratar e-mails de envio/entrega como confirmação
+  if (/shipped|delivered|out for delivery|enviado|entregue|a caminho/.test(s)) return false;
+  return padroes.some(rx => rx.test(s));
+}
+
+// ── Extração genérica do nº do pedido (para o fallback de garantia) ──
+export function extrairNumeroPedidoGenerico(subject, html) {
+  const m1 = (subject || '').match(/#(\d{4,})/);
+  if (m1) return m1[1];
+  const txt = (html || '').replace(/<[^>]+>/g, '|');
+  const m2 = txt.match(/Order number:\s*\|?\s*([0-9A-Z][0-9A-Z-]{6,})/i) || txt.match(/[Oo]rder\s*#?(\d{4,})/);
+  return m2 ? m2[1] : null;
 }
 
 // ── SHOPIFY PADRÃO (Nude Project e similares) ──
