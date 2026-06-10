@@ -47,6 +47,7 @@ export function initDb() {
       email_id      TEXT,
       lote_id       TEXT,
       aviso_atraso_em TEXT,                            -- quando o e-mail de atraso foi enviado
+      excluido_em   TEXT,                              -- lixeira: quando foi movido (NULL = ativo)
       criado_em     TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (lote_id) REFERENCES lotes(id)
     );
@@ -80,7 +81,8 @@ function migrar() {
   const esperado = {
     pedidos: {
       seq: 'INTEGER',
-      aviso_atraso_em: 'TEXT'
+      aviso_atraso_em: 'TEXT',
+      excluido_em: 'TEXT'
     },
     itens: {
       foto_recebida_em: 'TEXT'
