@@ -8,11 +8,17 @@ import nodemailer from 'nodemailer';
 
 const DRY = !process.env.SMTP_HOST;
 
+const PORT = parseInt(process.env.SMTP_PORT || '465');
+
 const transporter = DRY ? null : nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_PORT === '465',
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+  port: PORT,
+  secure: PORT === 465,                 // 465 = SSL (porta liberada no Railway); 587 = STARTTLS
+  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  // Timeouts curtos: se o envio travar, falha rápido em vez de pendurar a página
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000
 });
 
 const FROM = process.env.ALERT_FROM || 'LK Sneakers <contato@lksneakers.com.br>';
@@ -74,6 +80,12 @@ export async function enviarAlertaAtraso(pedidos) {
     return { enviado: false, dryRun: true };
   }
 
-  await transporter.sendMail({ from: FROM, to: TO, subject, html });
-  return { enviado: true };
+  try {
+    await transporter.sendMail({ from: FROM, to: TO, subject, html });
+    return { enviado: true };
+  } catch (e) {
+    // Nunca deixa um erro de e-mail derrubar o app ou pendurar a página
+    console.error('✗ Falha ao enviar e-mail de atraso:', e.code || e.message);
+    return { enviado: false, erro: e.code || e.message };
+  }
 }
