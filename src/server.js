@@ -65,7 +65,7 @@ app.post('/pedidos', (req, res) => {
 // ── ANEXAR FOTO a um item ──
 app.post('/itens/:id/foto', upload.single('foto'), (req, res) => {
   if (req.file) store.anexarFoto(req.params.id, '/uploads/' + req.file.filename);
-  res.redirect('back');
+  res.redirect(req.get('Referrer') || '/');
 });
 
 // ── CRIAR LOTE ──
@@ -99,12 +99,20 @@ app.post('/lotes/:id/entregar', (req, res) => {
 app.get('/check-atrasos', async (req, res) => {
   const atrasados = store.pedidosAtrasadosNaoAvisados();
   const r = await enviarAlertaAtraso(atrasados);
+  // Só marca como avisado se realmente enviou (ou em modo teste)
   if (r.enviado || r.dryRun) atrasados.forEach(p => store.marcarAvisoEnviado(p.id));
-  res.render('erro', {
-    msg: atrasados.length
-      ? `${atrasados.length} pedido(s) atrasado(s) processado(s). ${r.dryRun ? '(modo teste — veja o console)' : 'E-mail enviado.'}`
-      : 'Nenhum pedido atrasado pendente de aviso.'
-  });
+
+  let msg;
+  if (!atrasados.length) {
+    msg = 'Nenhum pedido atrasado pendente de aviso.';
+  } else if (r.enviado) {
+    msg = `${atrasados.length} pedido(s) atrasado(s) — e-mail enviado com sucesso.`;
+  } else if (r.dryRun) {
+    msg = `${atrasados.length} pedido(s) atrasado(s) processado(s). (modo teste — veja o console)`;
+  } else {
+    msg = `Encontrei ${atrasados.length} pedido(s) atrasado(s), mas o envio do e-mail falhou (${r.erro}). Os pedidos NÃO foram marcados como avisados — tente de novo após ajustar o SMTP.`;
+  }
+  res.render('erro', { msg });
 });
 
 const PORT = process.env.PORT || 3000;
