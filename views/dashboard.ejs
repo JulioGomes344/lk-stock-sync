@@ -87,21 +87,24 @@
 
       <!-- MODAL NOVO PEDIDO -->
       <div x-show="modal==='pedido'" x-cloak class="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto py-10" @click.self="modal=null">
-        <div class="bg-white max-w-2xl w-full mx-4 p-8" x-data="{ itens:[{}] }">
+        <div class="bg-white max-w-2xl w-full mx-4 p-8" x-data="{ itens:[{}], lojaSel:'<%= LOJAS[0] %>' }">
           <div class="kicker mb-1">Entrada Manual</div>
           <h2 class="font-display text-3xl font-light mb-6">Novo <em class="text-warmgray">Pedido</em></h2>
+          <p class="text-medgray text-xs font-light -mt-4 mb-5">O número do pedido é gerado automaticamente.</p>
           <form method="POST" action="/pedidos">
             <div class="grid grid-cols-2 gap-4 mb-4">
               <div><label>Loja</label>
-                <select name="loja" required>
+                <select name="loja" x-model="lojaSel" required>
                   <% LOJAS.forEach(l => { %><option><%= l %></option><% }) %>
-                </select></div>
-              <div><label>Nº do Pedido</label><input name="numero_pedido" placeholder="#1234"></div>
-              <div><label>Data da Compra</label><input type="date" name="data_compra"></div>
-              <div class="grid grid-cols-2 gap-2">
-                <div><label>Valor</label><input type="number" step="0.01" name="valor" placeholder="0.00"></div>
-                <div><label>Moeda</label><select name="moeda"><option>USD</option><option>EUR</option><option>BRL</option></select></div>
+                  <option value="__nova__">+ Outra loja...</option>
+                </select>
+                <input x-show="lojaSel==='__nova__'" x-cloak name="loja_nova"
+                       placeholder="Nome da nova loja" class="mt-2"
+                       :required="lojaSel==='__nova__'">
               </div>
+              <div><label>Data da Compra</label><input name="data_compra" placeholder="Ex: 09/06/2026 ou hoje"></div>
+              <div><label>Valor</label><input type="number" step="0.01" name="valor" placeholder="0.00"></div>
+              <div><label>Moeda</label><select name="moeda"><option>USD</option><option>EUR</option><option>BRL</option></select></div>
             </div>
 
             <div class="rule my-5"></div>
@@ -188,6 +191,13 @@
 
         <!-- PAINEL EXPANDIDO -->
         <div x-show="open" x-cloak class="mt-5 pt-5 border-t border-lightgray">
+          <!-- DADOS DO PEDIDO -->
+          <div class="flex flex-wrap gap-x-8 gap-y-2 mb-5">
+            <div><div class="kicker">Nº do Pedido</div><div class="text-sm font-light mt-1">#<%= p.numero_pedido %></div></div>
+            <div><div class="kicker">Loja</div><div class="text-sm font-light mt-1"><%= p.loja %></div></div>
+            <div><div class="kicker">Data da Compra</div><div class="text-sm font-light mt-1"><%= p.data_compra || '—' %></div></div>
+            <% if (p.valor) { %><div><div class="kicker">Valor</div><div class="text-sm font-light mt-1"><%= p.moeda %> <%= p.valor.toFixed(2) %></div></div><% } %>
+          </div>
           <!-- ITENS + FOTOS -->
           <div class="grid md:grid-cols-2 gap-4 mb-5">
             <% p.itens.forEach(it => { %>
