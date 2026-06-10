@@ -1,28 +1,21 @@
-import nodemailer from 'nodemailer';
+// ─── Envio de alertas via API HTTP do Resend ───
+// Usa HTTPS (porta 443), que nunca é bloqueada — ao contrário das portas SMTP
+// (587/465), que o Railway bloqueia na saída.
+//
+// Variáveis de ambiente:
+// SMTP_PASS   → API key do Resend (começa com re_...). Mantivemos o mesmo nome
+//               de variável para você não precisar reconfigurar nada no Railway.
+//               (RESEND_API_KEY também funciona, se preferir renomear depois.)
+// ALERT_TO    → destinatário(s), separados por vírgula
+// ALERT_FROM  → remetente (precisa ser de domínio verificado no Resend)
+// Sem chave configurada → DRY RUN: apenas loga no console.
 
-// ─── Config por variáveis de ambiente ───
-// SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS  → credenciais do servidor
-// ALERT_TO    → e-mail que recebe os avisos (ex: contato@lksneakers.com.br)
-// ALERT_FROM  → remetente (default: "LK Sneakers <contato@lksneakers.com.br>")
-// Sem SMTP configurado → DRY RUN: apenas loga no console (bom para testar).
-
-const DRY = !process.env.SMTP_HOST;
-
-const PORT = parseInt(process.env.SMTP_PORT || '465');
-
-const transporter = DRY ? null : nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: PORT,
-  secure: PORT === 465,                 // 465 = SSL (porta liberada no Railway); 587 = STARTTLS
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  // Timeouts curtos: se o envio travar, falha rápido em vez de pendurar a página
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 15000
-});
+const API_KEY = process.env.RESEND_API_KEY || process.env.SMTP_PASS;
+const DRY = !API_KEY;
 
 const FROM = process.env.ALERT_FROM || 'LK Sneakers <contato@lksneakers.com.br>';
-const TO = process.env.ALERT_TO || 'contato@lksneakers.com.br';
+const TO = (process.env.ALERT_TO || 'contato@lksneakers.com.br')
+  .split(',').map(e => e.trim()).filter(Boolean);
 
 const LOGO_BRANCO = 'https://lksneakers.com.br/cdn/shop/files/LOGO-LK-BRANCO_885e01ed-68da-4988-b5a2-4ff4a10e238b.png?v=1763660281';
 
@@ -66,7 +59,7 @@ function montarHtml(pedidos) {
   </div>`;
 }
 
-// Envia (ou loga, em dry-run) o resumo de pedidos atrasados.
+// Envia (ou loga, em dry-run) o resumo de pedidos atrasados via API do Resend.
 export async function enviarAlertaAtraso(pedidos) {
   if (!pedidos.length) return { enviado: false, motivo: 'sem pedidos atrasados' };
 
@@ -74,18 +67,38 @@ export async function enviarAlertaAtraso(pedidos) {
   const subject = `LK · ${pedidos.length} ${pedidos.length === 1 ? 'pedido atrasado' : 'pedidos atrasados'} (+4 semanas)`;
 
   if (DRY) {
-    console.log('─── [DRY RUN] E-mail de atraso (configure SMTP_* para enviar de verdade) ───');
-    console.log('Para:', TO, '| Assunto:', subject);
+    console.log('─── [DRY RUN] E-mail de atraso (configure SMTP_PASS com a API key do Resend) ───');
+    console.log('Para:', TO.join(', '), '| Assunto:', subject);
     console.log('Pedidos:', pedidos.map(p => `${p.loja} #${p.numero_pedido} (${p.semaforo.dias}d)`).join(', '));
     return { enviado: false, dryRun: true };
   }
 
   try {
-    await transporter.sendMail({ from: FROM, to: TO, subject, html });
+    // Timeout de 15s: nunca deixa a página pendurada
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ from: FROM, to: TO, subject, html }),
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '');
+      console.error('✗ Resend recusou o envio:', resp.status, body);
+      return { enviado: false, erro: `Resend ${resp.status}: ${body.slice(0, 200)}` };
+    }
+
     return { enviado: true };
   } catch (e) {
-    // Nunca deixa um erro de e-mail derrubar o app ou pendurar a página
-    console.error('✗ Falha ao enviar e-mail de atraso:', e.code || e.message);
-    return { enviado: false, erro: e.code || e.message };
+    const motivo = e.name === 'AbortError' ? 'timeout (15s)' : (e.code || e.message);
+    console.error('✗ Falha ao enviar e-mail de atraso:', motivo);
+    return { enviado: false, erro: motivo };
   }
 }
