@@ -7,6 +7,7 @@ import { nanoid } from 'nanoid';
 import * as store from './store.js';
 import { enviarAlertaAtraso } from './email.js';
 import { initDb } from './init-db.js';
+import { sincronizarGmail, gmailConfigurado } from './gmail.js';
 
 // Cria as tabelas e a pasta de uploads no boot (idempotente).
 // Assim o app nunca sobe sem schema — não depende do start command.
@@ -101,6 +102,16 @@ app.post('/lotes/:id/entregar', (req, res) => {
   res.redirect('/?aba=entregue');
 });
 
+// ── SINCRONIZAÇÃO MANUAL DO GMAIL ──
+app.get('/sync-gmail', async (req, res) => {
+  const r = await sincronizarGmail();
+  res.render('erro', {
+    msg: r.ok
+      ? `Sincronização concluída: ${r.criados} pedido(s) novo(s), ${r.ignorados} ignorado(s) (já processados ou não-confirmação), ${r.processados} e-mail(s) lidos.`
+      : `Sincronização indisponível: ${r.motivo}`
+  });
+});
+
 // ── CHECAGEM MANUAL DE ATRASOS (dispara e-mail) ──
 app.get('/check-atrasos', async (req, res) => {
   const atrasados = store.pedidosAtrasadosNaoAvisados();
@@ -181,3 +192,13 @@ async function verificarAtrasosAutomatico() {
 
 setTimeout(verificarAtrasosAutomatico, 30 * 1000); // 30s após o boot
 setInterval(verificarAtrasosAutomatico, UMA_HORA);  // depois, a cada hora
+
+// ── CRON INTERNO: sincronização do Gmail a cada 30 min ──
+const MEIA_HORA = 30 * 60 * 1000;
+async function sincronizarGmailAutomatico() {
+  if (!gmailConfigurado()) return; // sem credenciais, fica em silêncio
+  const r = await sincronizarGmail();
+  if (r.ok && r.criados > 0) console.log(`✓ [cron-gmail] ${r.criados} pedido(s) novo(s) importado(s).`);
+}
+setTimeout(sincronizarGmailAutomatico, 60 * 1000);  // 1min após o boot
+setInterval(sincronizarGmailAutomatico, MEIA_HORA);
