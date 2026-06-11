@@ -58,7 +58,7 @@
     </div>
   </header>
 
-  <main class="w-full max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 flex-1" x-data="{ modal:null, busca:'' }">
+  <main class="w-full max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 flex-1" x-data="{ modal:null, busca:'', filtroSem:'' }">
 
     <!-- TÍTULO DA PÁGINA -->
     <div class="mb-8 md:mb-10">
@@ -85,21 +85,34 @@
         <span class="text-medgray text-[9px] md:text-[10px] font-light">não inclui entregues</span>
       </div>
       <div class="grid grid-cols-3 divide-x divide-lightgray">
-        <div class="sem-verde p-3 md:p-5 flex items-center gap-2 md:gap-3">
+        <button type="button" @click="filtroSem = filtroSem==='verde' ? '' : 'verde'"
+                class="sem-verde p-3 md:p-5 flex items-center gap-2 md:gap-3 text-left transition cursor-pointer"
+                :class="filtroSem==='verde' ? 'bg-offwhite' : 'hover:bg-offwhite'"
+                :style="filtroSem==='verde' ? 'box-shadow: inset 0 -2px 0 var(--c)' : ''">
           <span class="dot"></span>
           <div class="min-w-0"><div class="font-display text-xl md:text-2xl font-light"><%= resumoSemaforo.verde %></div>
           <div class="text-[8px] md:text-[9px] tracking-wider uppercase text-medgray leading-tight">No prazo<span class="hidden md:inline"> · até 2 sem.</span></div></div>
-        </div>
-        <div class="sem-amarelo p-3 md:p-5 flex items-center gap-2 md:gap-3">
+        </button>
+        <button type="button" @click="filtroSem = filtroSem==='amarelo' ? '' : 'amarelo'"
+                class="sem-amarelo p-3 md:p-5 flex items-center gap-2 md:gap-3 text-left transition cursor-pointer"
+                :class="filtroSem==='amarelo' ? 'bg-offwhite' : 'hover:bg-offwhite'"
+                :style="filtroSem==='amarelo' ? 'box-shadow: inset 0 -2px 0 var(--c)' : ''">
           <span class="dot"></span>
           <div class="min-w-0"><div class="font-display text-xl md:text-2xl font-light"><%= resumoSemaforo.amarelo %></div>
           <div class="text-[8px] md:text-[9px] tracking-wider uppercase text-medgray leading-tight">A expirar<span class="hidden md:inline"> · 3ª–4ª sem.</span></div></div>
-        </div>
-        <div class="sem-vermelho p-3 md:p-5 flex items-center gap-2 md:gap-3">
+        </button>
+        <button type="button" @click="filtroSem = filtroSem==='vermelho' ? '' : 'vermelho'"
+                class="sem-vermelho p-3 md:p-5 flex items-center gap-2 md:gap-3 text-left transition cursor-pointer"
+                :class="filtroSem==='vermelho' ? 'bg-offwhite' : 'hover:bg-offwhite'"
+                :style="filtroSem==='vermelho' ? 'box-shadow: inset 0 -2px 0 var(--c)' : ''">
           <span class="dot"></span>
           <div class="min-w-0"><div class="font-display text-xl md:text-2xl font-light"><%= resumoSemaforo.vermelho %></div>
           <div class="text-[8px] md:text-[9px] tracking-wider uppercase text-medgray leading-tight">Atrasado<span class="hidden md:inline"> · +4 sem.</span></div></div>
-        </div>
+        </button>
+      </div>
+      <div x-show="filtroSem" x-cloak class="px-4 md:px-6 py-2 border-t border-lightgray flex items-center gap-3">
+        <span class="text-[10px] text-medgray font-light">Filtrando: <span class="font-medium" x-text="filtroSem==='vermelho' ? 'Atrasados' : filtroSem==='amarelo' ? 'A expirar' : 'No prazo'"></span></span>
+        <button type="button" class="acao-link" style="color:#0a0a0a;min-height:auto" @click="filtroSem=''">limpar ×</button>
       </div>
     </div>
 
@@ -218,7 +231,8 @@
       <% const q = (p.loja + ' ' + (p.numero_pedido||'') + ' ' + (p.pedido_loja||'') + ' ' + p.itens.map(i=>i.nome).join(' ')).toLowerCase() %>
       <% const fotoCapa = (p.itens.find(i => i.foto_url) || {}).foto_url %>
       <div class="bg-white p-4 md:p-6 card-sem sem-<%= p.semaforo.cor %>" x-data="{ open:false }"
-           data-q="<%= q %>" x-show="busca.trim()==='' || $el.dataset.q.includes(busca.trim().toLowerCase())">
+           data-q="<%= q %>" data-sem="<%= p.semaforo.cor %>"
+           x-show="(busca.trim()==='' || $el.dataset.q.includes(busca.trim().toLowerCase())) && (filtroSem==='' || $el.dataset.sem===filtroSem)">
         <div class="flex items-start gap-3 md:gap-4">
 
           <!-- MINIATURA DO PRODUTO -->
