@@ -8,6 +8,7 @@ import * as store from './store.js';
 import { enviarAlertaAtraso } from './email.js';
 import { initDb } from './init-db.js';
 import { sincronizarGmail, gmailConfigurado } from './gmail.js';
+import { exigirLogin, criarSessao, encerrarSessao, senhaCorreta, senhaConfigurada } from './auth.js';
 
 // Cria as tabelas e a pasta de uploads no boot (idempotente).
 // Assim o app nunca sobe sem schema — não depende do start command.
@@ -31,7 +32,21 @@ app.set('views', join(__dirname, '..', 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/static', express.static(join(__dirname, '..', 'public')));
+// ── AUTENTICAÇÃO: tudo abaixo exige login ──
+app.get('/login', (req, res) => res.render('login', { configurada: senhaConfigurada(), erro: null }));
+app.post('/login', (req, res) => {
+  if (senhaCorreta(req.body.senha)) {
+    criarSessao(res);
+    return res.redirect('/');
+  }
+  res.status(401).render('login', { configurada: senhaConfigurada(), erro: 'Senha incorreta.' });
+});
+app.get('/logout', (req, res) => { encerrarSessao(res); res.redirect('/login'); });
+// Fotos ficam fora do login: nomes são códigos aleatórios não-adivinháveis,
+// e o e-mail de atraso precisa carregar as imagens sem sessão.
 app.use('/uploads', express.static(UPLOAD_DIR));
+
+app.use(exigirLogin);
 
 // ── DASHBOARD (3 abas) ──
 app.get('/', (req, res) => {
