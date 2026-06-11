@@ -57,6 +57,7 @@ app.get('/', (req, res) => {
     resumoSemaforo: store.resumoSemaforo(),
     pedidos: aba === 'lixeira' ? store.listarLixeira() : store.listarPorStatus(aba),
     lotes: store.listarLotesComPedidos(),
+    lotesLixeira: aba === 'lixeira' ? store.listarLotesLixeira() : [],
     lotesAtivos: store.listarLotesAtivos(),
     LOJAS: store.listarLojas()
   });
@@ -145,6 +146,29 @@ app.get('/check-atrasos', async (req, res) => {
     msg = `Encontrei ${atrasados.length} pedido(s) atrasado(s), mas o envio do e-mail falhou (${r.erro}). Os pedidos NÃO foram marcados como avisados — tente de novo após ajustar o SMTP.`;
   }
   res.render('erro', { msg });
+});
+
+// ── LIXEIRA DE LOTES ──
+app.post('/lotes/:id/excluir', (req, res) => {
+  store.moverLoteParaLixeira(req.params.id);
+  res.redirect('/?aba=lixeira');
+});
+
+app.post('/lotes/:id/restaurar', (req, res) => {
+  store.restaurarLoteDaLixeira(req.params.id);
+  res.redirect('/?aba=lotes');
+});
+
+app.post('/lotes/:id/excluir-definitivo', (req, res) => {
+  const senhaDef = process.env.DELETE_PASSWORD;
+  if (!senhaDef) {
+    return res.status(400).render('erro', { msg: 'A exclusão definitiva está bloqueada: configure a variável DELETE_PASSWORD no Railway para habilitá-la.' });
+  }
+  if (req.body.senha !== senhaDef) {
+    return res.status(403).render('erro', { msg: 'Senha incorreta. O lote permanece na lixeira.' });
+  }
+  store.excluirLoteDefinitivo(req.params.id);
+  res.redirect('/?aba=lixeira');
 });
 
 // ── AVISO INDIVIDUAL POR PEDIDO: atraso ou prioridade de envio ──
