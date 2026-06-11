@@ -50,7 +50,7 @@ app.use(exigirLogin);
 
 // ── DASHBOARD (3 abas) ──
 app.get('/', (req, res) => {
-  const aba = ['pendente', 'enviado', 'entregue', 'lixeira'].includes(req.query.aba) ? req.query.aba : 'pendente';
+  const aba = ['pendente', 'enviado', 'entregue', 'lotes', 'lixeira'].includes(req.query.aba) ? req.query.aba : 'pendente';
   res.render('dashboard', {
     aba,
     resumo: store.resumo(),
