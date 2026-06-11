@@ -1,316 +1,219 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LK Sneakers — Compras Internacionais</title>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:ital,wght@0,300;0,400;0,500&display=swap" rel="stylesheet">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <script>
-    tailwind.config = { theme: { extend: { colors: {
-      black:'#0a0a0a', offwhite:'#f5f4f2', warmgray:'#b5b0a8', lightgray:'#e8e6e2',
-      medgray:'#8a8580', darkgray:'#2a2725', redsub:'#c4463a', greensub:'#3a7d44'
-    }, fontFamily: { display:['"Cormorant Garamond"','serif'], body:['"DM Sans"','sans-serif'] } } } }
-  </script>
-  <style>
-    body{font-family:'DM Sans',sans-serif;background:#f5f4f2;color:#0a0a0a}
-    .kicker{font-size:8px;letter-spacing:4px;text-transform:uppercase;color:#b5b0a8}
-    .rule{width:28px;height:1px;background:#e8e6e2}
-    .btn{font-size:10px;letter-spacing:3px;text-transform:uppercase;padding:12px 28px;transition:all .25s}
-    .btn-dark{background:#0a0a0a;color:#fff}.btn-dark:hover{background:#2a2725}
-    .btn-out{border:1px solid #0a0a0a}.btn-out:hover{background:#0a0a0a;color:#fff}
-    .tab{font-size:11px;letter-spacing:2px;text-transform:uppercase;padding:14px 4px;border-bottom:2px solid transparent;color:#8a8580}
-    .tab.active{color:#0a0a0a;border-color:#0a0a0a}
-    /* Semáforo de prazo */
-    .sem-verde   { --c:#3a7d44; --bg:rgba(58,125,68,.10); }
-    .sem-amarelo { --c:#92620a; --bg:rgba(146,98,10,.12); }
-    .sem-vermelho{ --c:#c4463a; --bg:rgba(196,70,58,.12); }
-    .sem-neutro  { --c:#8a8580; --bg:rgba(138,133,128,.10); }
-    .card-sem { border-left:3px solid var(--c, transparent); }
-    .badge-sem{ font-size:8px;letter-spacing:2px;text-transform:uppercase;padding:4px 9px;color:var(--c);background:var(--bg); }
-    .dot{ width:8px;height:8px;border-radius:50%;background:var(--c);display:inline-block; }
-    input,select{font-family:'DM Sans';font-size:13px;border:1px solid #e8e6e2;padding:10px 12px;background:#fff;width:100%}
-    input:focus,select:focus{outline:none;border-color:#0a0a0a}
-    label{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#8a8580;display:block;margin-bottom:5px}
-  </style>
-</head>
-<body class="min-h-screen">
+import express from 'express';
+import multer from 'multer';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join, extname } from 'path';
+import { nanoid } from 'nanoid';
+import * as store from './store.js';
+import { enviarAlertaAtraso } from './email.js';
+import { initDb } from './init-db.js';
+import { sincronizarGmail, gmailConfigurado } from './gmail.js';
+import { exigirLogin, criarSessao, encerrarSessao, senhaCorreta, senhaConfigurada } from './auth.js';
 
-  <!-- HEADER -->
-  <header class="bg-black text-white px-6 md:px-10 py-5 flex items-center justify-between sticky top-0 z-30">
-    <div style="font-weight:500;font-size:18px;letter-spacing:8px;">LK SNEAKERS</div>
-    <div class="kicker" style="color:#b5b0a8">Compras Internacionais</div>
-  </header>
+// Cria as tabelas e a pasta de uploads no boot (idempotente).
+// Assim o app nunca sobe sem schema — não depende do start command.
+initDb();
 
-  <main class="max-w-6xl mx-auto px-4 md:px-8 py-10">
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const app = express();
 
-    <!-- KPIs -->
-    <div class="grid grid-cols-3 gap-px bg-lightgray border border-lightgray mb-10">
-      <% const labels = {pendente:'Pendente', enviado:'Enviado', entregue:'Entregue'} %>
-      <% for (const [k,v] of Object.entries(resumo)) { %>
-        <a href="/?aba=<%= k %>" class="bg-white p-6 text-center hover:bg-offwhite transition">
-          <div class="font-display text-4xl font-light"><%= v %></div>
-          <div class="kicker mt-2"><%= labels[k] %></div>
-        </a>
-      <% } %>
-    </div>
+// Upload de fotos (as que o vendedor envia). No Railway, aponte para o Volume.
+const UPLOAD_DIR = process.env.UPLOAD_DIR || join(__dirname, '..', 'uploads');
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOAD_DIR,
+    filename: (_, file, cb) => cb(null, nanoid(12) + extname(file.originalname))
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 }
+});
 
-    <!-- SEMÁFORO DE PRAZO (legenda + contadores) -->
-    <div class="border border-lightgray bg-white mb-10">
-      <div class="px-6 py-3 border-b border-lightgray flex items-center justify-between">
-        <span class="kicker">Prazo desde a compra</span>
-        <span class="text-medgray text-[10px] font-light">não inclui entregues</span>
-      </div>
-      <div class="grid grid-cols-3 divide-x divide-lightgray">
-        <div class="sem-verde p-5 flex items-center gap-3">
-          <span class="dot"></span>
-          <div><div class="font-display text-2xl font-light"><%= resumoSemaforo.verde %></div>
-          <div class="text-[9px] tracking-wider uppercase text-medgray">No prazo · até 2 sem.</div></div>
-        </div>
-        <div class="sem-amarelo p-5 flex items-center gap-3">
-          <span class="dot"></span>
-          <div><div class="font-display text-2xl font-light"><%= resumoSemaforo.amarelo %></div>
-          <div class="text-[9px] tracking-wider uppercase text-medgray">A expirar · 3ª–4ª sem.</div></div>
-        </div>
-        <div class="sem-vermelho p-5 flex items-center gap-3">
-          <span class="dot"></span>
-          <div><div class="font-display text-2xl font-light"><%= resumoSemaforo.vermelho %></div>
-          <div class="text-[9px] tracking-wider uppercase text-medgray">Atrasado · +4 sem.</div></div>
-        </div>
-      </div>
-    </div>
-    <div class="flex flex-wrap gap-3 mb-8" x-data="{ modal:null }">
-      <button @click="modal='pedido'" class="btn btn-dark">+ Novo Pedido</button>
-      <button @click="modal='lote'" class="btn btn-out">+ Novo Lote</button>
-      <a href="/check-atrasos" class="btn btn-out" style="border-color:#c4463a;color:#c4463a">Verificar Atrasos · E-mail</a>
-      <a href="/sync-gmail" class="btn btn-out">Sincronizar Gmail</a>
+app.set('view engine', 'ejs');
+app.set('views', join(__dirname, '..', 'views'));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use('/static', express.static(join(__dirname, '..', 'public')));
+// ── AUTENTICAÇÃO: tudo abaixo exige login ──
+app.get('/login', (req, res) => res.render('login', { configurada: senhaConfigurada(), erro: null }));
+app.post('/login', (req, res) => {
+  if (senhaCorreta(req.body.senha)) {
+    criarSessao(res);
+    return res.redirect('/');
+  }
+  res.status(401).render('login', { configurada: senhaConfigurada(), erro: 'Senha incorreta.' });
+});
+app.get('/logout', (req, res) => { encerrarSessao(res); res.redirect('/login'); });
+// Fotos ficam fora do login: nomes são códigos aleatórios não-adivinháveis,
+// e o e-mail de atraso precisa carregar as imagens sem sessão.
+app.use('/uploads', express.static(UPLOAD_DIR));
 
-      <!-- MODAL NOVO PEDIDO -->
-      <div x-show="modal==='pedido'" x-cloak class="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto py-10" @click.self="modal=null">
-        <div class="bg-white max-w-2xl w-full mx-4 p-8" x-data="{ itens:[{}], lojaSel:'<%= LOJAS[0] %>' }">
-          <div class="kicker mb-1">Entrada Manual</div>
-          <h2 class="font-display text-3xl font-light mb-6">Novo <em class="text-warmgray">Pedido</em></h2>
-          <p class="text-medgray text-xs font-light -mt-4 mb-5">O número do pedido é gerado automaticamente.</p>
-          <form method="POST" action="/pedidos" enctype="multipart/form-data">
-            <div class="grid grid-cols-2 gap-4 mb-4">
-              <div><label>Loja</label>
-                <select name="loja" x-model="lojaSel" required>
-                  <% LOJAS.forEach(l => { %><option><%= l %></option><% }) %>
-                  <option value="__nova__">+ Outra loja...</option>
-                </select>
-                <input x-show="lojaSel==='__nova__'" x-cloak name="loja_nova"
-                       placeholder="Nome da nova loja" class="mt-2"
-                       :required="lojaSel==='__nova__'">
-              </div>
-              <div><label>Data da Compra</label><input name="data_compra" placeholder="Ex: 09/06/2026 ou hoje"></div>
-              <div><label>Valor</label><input type="number" step="0.01" name="valor" placeholder="0.00"></div>
-              <div><label>Moeda</label><select name="moeda"><option>USD</option><option>EUR</option><option>BRL</option></select></div>
-            </div>
+app.use(exigirLogin);
 
-            <div class="rule my-5"></div>
-            <label>Itens</label>
-            <template x-for="(item,i) in itens" :key="i">
-              <div class="mb-3">
-                <div class="grid grid-cols-12 gap-2">
-                  <input class="col-span-7" name="item_nome" placeholder="Nome do produto">
-                  <input class="col-span-2" name="item_tamanho" placeholder="Tam.">
-                  <input class="col-span-2" type="number" name="item_qtd" value="1" min="1">
-                  <button type="button" class="col-span-1 text-redsub text-lg" @click="itens.splice(i,1)" x-show="itens.length>1">×</button>
-                </div>
-                <div class="mt-1 flex items-center gap-2">
-                  <span class="text-[8px] tracking-wider uppercase text-medgray">Foto (opcional)</span>
-                  <input type="file" :name="'item_foto_'+i" accept="image/*"
-                         class="text-[10px] flex-1" style="border:none;padding:0;background:transparent">
-                </div>
-              </div>
-            </template>
-            <button type="button" class="kicker mt-1" style="color:#0a0a0a" @click="itens.push({})">+ adicionar item</button>
+// ── DASHBOARD (3 abas) ──
+app.get('/', (req, res) => {
+  const aba = ['pendente', 'enviado', 'entregue', 'lixeira'].includes(req.query.aba) ? req.query.aba : 'pendente';
+  res.render('dashboard', {
+    aba,
+    resumo: store.resumo(),
+    resumoSemaforo: store.resumoSemaforo(),
+    pedidos: aba === 'lixeira' ? store.listarLixeira() : store.listarPorStatus(aba),
+    lotes: store.listarLotesComPedidos(),
+    lotesAtivos: store.listarLotesAtivos(),
+    LOJAS: store.listarLojas()
+  });
+});
 
-            <div class="flex gap-3 mt-7">
-              <button class="btn btn-dark flex-1">Salvar como Pendente</button>
-              <button type="button" class="btn btn-out" @click="modal=null">Cancelar</button>
-            </div>
-          </form>
-        </div>
-      </div>
+// ── CRIAR PEDIDO (manual) ──
+// upload.any() aceita os campos de foto indexados (item_foto_0, item_foto_1...)
+// junto com os campos de texto do formulário
+app.post('/pedidos', upload.any(), (req, res) => {
+  const { loja, loja_nova, data_compra, valor, moeda } = req.body;
+  // Se o usuário escolheu "Outra" e digitou um nome, usa esse nome
+  const lojaFinal = (loja === '__nova__' && loja_nova?.trim()) ? loja_nova.trim() : loja;
+  const pid = store.criarPedido({ loja: lojaFinal, data_compra, valor: valor ? parseFloat(valor) : null, moeda });
 
-      <!-- MODAL NOVO LOTE -->
-      <div x-show="modal==='lote'" x-cloak class="fixed inset-0 bg-black/60 z-50 flex items-start justify-center py-10" @click.self="modal=null">
-        <div class="bg-white max-w-lg w-full mx-4 p-8">
-          <div class="kicker mb-1">Agrupamento de Envio</div>
-          <h2 class="font-display text-3xl font-light mb-6">Novo <em class="text-warmgray">Lote</em></h2>
-          <form method="POST" action="/lotes">
-            <div class="mb-4"><label>Descrição</label><input name="descricao" placeholder="Ex: Envio EUA — Julho/01"></div>
-            <div class="grid grid-cols-2 gap-4 mb-4">
-              <div><label>Transportadora</label><input name="transportadora" placeholder="DHL, FedEx..."></div>
-              <div><label>Cód. Rastreio</label><input name="codigo_rastreio"></div>
-            </div>
-            <div class="mb-6"><label>Data de Envio</label><input type="date" name="data_envio"></div>
-            <div class="flex gap-3">
-              <button class="btn btn-dark flex-1">Criar Lote</button>
-              <button type="button" class="btn btn-out" @click="modal=null">Cancelar</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+  // itens vêm como arrays paralelos do form; fotos casam pelo índice no fieldname
+  const nomes = [].concat(req.body.item_nome || []);
+  const tams = [].concat(req.body.item_tamanho || []);
+  const qtds = [].concat(req.body.item_qtd || []);
+  nomes.forEach((nome, i) => {
+    if (!nome?.trim()) return;
+    const itemId = store.adicionarItem(pid, { nome, tamanho: tams[i], qtd: parseInt(qtds[i]) || 1 });
+    const foto = (req.files || []).find(f => f.fieldname === `item_foto_${i}`);
+    if (foto) store.anexarFoto(itemId, '/uploads/' + foto.filename);
+  });
+  res.redirect('/?aba=pendente');
+});
 
-    <!-- TABS -->
-    <div class="flex gap-8 border-b border-lightgray mb-8">
-      <% for (const k of ['pendente','enviado','entregue']) { %>
-        <a href="/?aba=<%= k %>" class="tab <%= aba===k?'active':'' %>"><%= labels[k] %></a>
-      <% } %>
-      <a href="/?aba=lixeira" class="tab <%= aba==='lixeira'?'active':'' %>" style="margin-left:auto;<%= aba==='lixeira'?'':'color:#b5b0a8' %>">Lixeira</a>
-    </div>
+// ── ANEXAR FOTO a um item ──
+app.post('/itens/:id/foto', upload.single('foto'), (req, res) => {
+  if (req.file) store.anexarFoto(req.params.id, '/uploads/' + req.file.filename);
+  res.redirect(req.get('Referrer') || '/');
+});
 
-    <!-- LISTA DE PEDIDOS -->
-    <% if (pedidos.length === 0) { %>
-      <p class="text-medgray font-light text-sm py-16 text-center"><%= aba==='lixeira' ? 'A lixeira está vazia.' : 'Nenhum pedido nesta aba.' %></p>
-    <% } %>
+// ── CRIAR LOTE ──
+app.post('/lotes', (req, res) => {
+  const { descricao, transportadora, codigo_rastreio, data_envio } = req.body;
+  store.criarLote({ descricao, transportadora, codigo_rastreio, data_envio });
+  res.redirect('/?aba=pendente');
+});
 
-    <div class="space-y-px bg-lightgray border border-lightgray">
-    <% pedidos.forEach(p => { %>
-      <div class="bg-white p-5 md:p-6 card-sem sem-<%= p.semaforo.cor %>" x-data="{ open:false }">
-        <div class="flex items-start justify-between gap-4">
-          <div class="flex-1">
-            <div class="flex items-center gap-3 flex-wrap">
-              <span class="kicker"><%= p.loja %></span>
-              <% if (p.numero_pedido) { %><span class="text-medgray text-xs">#<%= p.numero_pedido %></span><% } %>
-              <% if (p.semaforo.cor !== 'neutro') { %>
-                <span class="badge-sem sem-<%= p.semaforo.cor %>"><%= p.semaforo.label %><% if (p.semaforo.dias != null) { %> · <%= p.semaforo.dias %>d<% } %></span>
-              <% } %>
-              <% p.alertas.forEach(a => { %>
-                <span class="text-[8px] tracking-wider uppercase px-2 py-1" style="background:rgba(196,70,58,.1);color:#c4463a"><%= a.msg %></span>
-              <% }) %>
-            </div>
-            <div class="font-display text-xl font-light mt-1">
-              <%= p.itens.map(i => i.nome + (i.tamanho ? ' · '+i.tamanho : '')).join(' / ') || 'Sem itens' %>
-            </div>
-            <div class="text-medgray text-xs mt-1 font-light">
-              <%= p.qtd_itens %> <%= p.qtd_itens===1?'item':'itens' %>
-              <% if (p.valor) { %> · <%= p.moeda %> <%= p.valor.toFixed(2) %><% } %>
-              <% if (p.qtd_fotos>0) { %> · <%= p.qtd_fotos %> foto(s)<% } %>
-              <% if (p.lote) { %> · Lote: <%= p.lote.descricao || p.lote.id %><% } %>
-              <span class="ml-1 text-warmgray"><%= p.origem==='email'?'· auto':'' %></span>
-            </div>
-          </div>
-          <div class="flex items-center gap-4">
-            <button @click="open=!open" class="kicker" style="color:#0a0a0a">Detalhes</button>
-            <% if (aba !== 'lixeira') { %>
-              <form method="POST" action="/pedidos/<%= p.id %>/excluir"
-                    onsubmit="return confirm('Mover o pedido #<%= p.numero_pedido %> para a lixeira?')">
-                <button class="kicker" style="color:#c4463a">Excluir</button>
-              </form>
-            <% } %>
-          </div>
-        </div>
+// ── MOVER PEDIDO PARA ENVIADO (valida foto + lote) ──
+app.post('/pedidos/:id/enviar', (req, res) => {
+  try {
+    store.moverParaEnviado(req.params.id, req.body.lote_id);
+    res.redirect('/?aba=enviado');
+  } catch (e) {
+    const msgs = {
+      FOTO_OBRIGATORIA: 'Anexe ao menos uma foto antes de marcar como enviado.',
+      LOTE_OBRIGATORIO: 'Selecione ou crie um lote para este envio.'
+    };
+    res.status(400).render('erro', { msg: msgs[e.message] || e.message });
+  }
+});
 
-        <% if (aba === 'lixeira') { %>
-          <!-- AÇÕES DA LIXEIRA -->
-          <div class="mt-4 pt-4 border-t border-lightgray flex flex-wrap items-center gap-3" x-data="{ confirmar:false }">
-            <span class="text-medgray text-[10px] font-light">Na lixeira desde <%= (p.excluido_em || '').slice(0,16) %></span>
-            <form method="POST" action="/pedidos/<%= p.id %>/restaurar" class="ml-auto">
-              <button class="btn btn-out">Restaurar</button>
-            </form>
-            <button type="button" class="btn btn-out" style="border-color:#c4463a;color:#c4463a"
-                    x-show="!confirmar" @click="confirmar=true">Excluir definitivamente</button>
-            <form method="POST" action="/pedidos/<%= p.id %>/excluir-definitivo"
-                  x-show="confirmar" x-cloak class="flex items-center gap-2"
-                  onsubmit="return confirm('ATENÇÃO: exclusão definitiva. Não há como recuperar. Continuar?')">
-              <input type="password" name="senha" placeholder="Senha" required
-                     class="!w-36" style="border-color:#c4463a">
-              <button class="btn btn-dark" style="background:#c4463a">Confirmar exclusão</button>
-              <button type="button" class="kicker" @click="confirmar=false">cancelar</button>
-            </form>
-          </div>
-        <% } %>
+// ── ENTREGAR LOTE INTEIRO ──
+app.post('/lotes/:id/entregar', (req, res) => {
+  store.entregarLote(req.params.id);
+  res.redirect('/?aba=entregue');
+});
 
-        <!-- PAINEL EXPANDIDO -->
-        <div x-show="open" x-cloak class="mt-5 pt-5 border-t border-lightgray">
-          <!-- DADOS DO PEDIDO -->
-          <div class="flex flex-wrap gap-x-8 gap-y-2 mb-5">
-            <div><div class="kicker">Nº do Pedido</div><div class="text-sm font-light mt-1">#<%= p.numero_pedido %></div></div>
-            <div><div class="kicker">Loja</div><div class="text-sm font-light mt-1"><%= p.loja %></div></div>
-            <% if (p.pedido_loja) { %><div><div class="kicker">Nº na Loja</div><div class="text-sm font-light mt-1">#<%= p.pedido_loja %></div></div><% } %>
-            <div><div class="kicker">Data da Compra</div><div class="text-sm font-light mt-1"><%= p.data_compra || '—' %></div></div>
-            <% if (p.valor) { %><div><div class="kicker">Valor</div><div class="text-sm font-light mt-1"><%= p.moeda %> <%= p.valor.toFixed(2) %></div></div><% } %>
-          </div>
-          <!-- ITENS + FOTOS -->
-          <div class="grid md:grid-cols-2 gap-4 mb-5">
-            <% p.itens.forEach(it => { %>
-              <div class="flex items-center gap-3 border border-lightgray p-3">
-                <% if (it.foto_url) { %>
-                  <img src="<%= it.foto_url %>" class="w-16 h-16 object-cover" style="background:#f5f4f2">
-                <% } else { %>
-                  <div class="w-16 h-16 flex items-center justify-center text-warmgray text-[8px] tracking-wider uppercase" style="background:#f5f4f2">Sem foto</div>
-                <% } %>
-                <div class="flex-1 min-w-0">
-                  <div class="text-sm font-light truncate"><%= it.nome %></div>
-                  <div class="text-medgray text-xs"><%= it.tamanho || '—' %> · qtd <%= it.qtd %></div>
-                  <% if (p.status!=='entregue' && aba!=='lixeira') { %>
-                    <form method="POST" action="/itens/<%= it.id %>/foto" enctype="multipart/form-data" class="mt-2">
-                      <input type="file" name="foto" accept="image/*" class="text-[10px]" style="border:none;padding:0" onchange="this.form.submit()">
-                    </form>
-                  <% } %>
-                </div>
-              </div>
-            <% }) %>
-          </div>
+// ── SINCRONIZAÇÃO MANUAL DO GMAIL ──
+app.get('/sync-gmail', async (req, res) => {
+  const r = await sincronizarGmail();
+  res.render('erro', {
+    msg: r.ok
+      ? `Sincronização concluída: ${r.criados} pedido(s) novo(s), ${r.ignorados} ignorado(s) (já processados ou não-confirmação), ${r.processados} e-mail(s) lidos.`
+      : `Sincronização indisponível: ${r.motivo}`
+  });
+});
 
-          <!-- AÇÃO: ENVIAR (só na aba pendente) -->
-          <% if (p.status==='pendente' && aba!=='lixeira') { %>
-            <form method="POST" action="/pedidos/<%= p.id %>/enviar" class="flex flex-wrap items-end gap-3">
-              <div class="flex-1 min-w-[200px]">
-                <label>Vincular ao Lote (obrigatório)</label>
-                <select name="lote_id" required>
-                  <option value="">Selecione um lote...</option>
-                  <% lotesAtivos.forEach(l => { %>
-                    <option value="<%= l.id %>"><%= l.descricao || l.id %> <%= l.transportadora?'· '+l.transportadora:'' %></option>
-                  <% }) %>
-                </select>
-              </div>
-              <button class="btn btn-dark">Marcar como Enviado →</button>
-            </form>
-            <p class="text-medgray text-[10px] mt-2 font-light">Requer ao menos 1 foto anexada + lote selecionado.</p>
-          <% } %>
-        </div>
-      </div>
-    <% }) %>
-    </div>
+// ── CHECAGEM MANUAL DE ATRASOS (dispara e-mail) ──
+app.get('/check-atrasos', async (req, res) => {
+  const atrasados = store.pedidosAtrasadosNaoAvisados();
+  const r = await enviarAlertaAtraso(atrasados);
+  // Só marca como avisado se realmente enviou (ou em modo teste)
+  if (r.enviado || r.dryRun) atrasados.forEach(p => store.marcarAvisoEnviado(p.id));
 
-    <!-- LOTES (visível na aba enviado) -->
-    <% if (aba==='enviado' && lotes.filter(l=>l.status==='em_transito').length) { %>
-      <div class="mt-12">
-        <div class="kicker mb-1">Em Trânsito</div>
-        <h2 class="font-display text-2xl font-light mb-5">Lotes <em class="text-warmgray">Ativos</em></h2>
-        <div class="space-y-px bg-lightgray border border-lightgray">
-        <% lotes.filter(l=>l.status==='em_transito').forEach(l => { %>
-          <div class="bg-white p-5 flex items-center justify-between gap-4">
-            <div>
-              <div class="font-display text-lg font-light"><%= l.descricao || l.id %></div>
-              <div class="text-medgray text-xs mt-1">
-                <%= l.transportadora || 'sem transportadora' %>
-                <% if(l.codigo_rastreio){ %> · <%= l.codigo_rastreio %><% } %>
-                · <%= l.pedidos.length %> pedido(s)
-              </div>
-            </div>
-            <form method="POST" action="/lotes/<%= l.id %>/entregar"
-                  onsubmit="return confirm('Marcar todos os <%= l.pedidos.length %> pedidos deste lote como entregues?')">
-              <button class="btn btn-out">Lote chegou → Entregue</button>
-            </form>
-          </div>
-        <% }) %>
-        </div>
-      </div>
-    <% } %>
+  let msg;
+  if (!atrasados.length) {
+    msg = 'Nenhum pedido atrasado pendente de aviso.';
+  } else if (r.enviado) {
+    msg = `${atrasados.length} pedido(s) atrasado(s) — e-mail enviado com sucesso.`;
+  } else if (r.dryRun) {
+    msg = `${atrasados.length} pedido(s) atrasado(s) processado(s). (modo teste — veja o console)`;
+  } else {
+    msg = `Encontrei ${atrasados.length} pedido(s) atrasado(s), mas o envio do e-mail falhou (${r.erro}). Os pedidos NÃO foram marcados como avisados — tente de novo após ajustar o SMTP.`;
+  }
+  res.render('erro', { msg });
+});
 
-  </main>
+// ── LIXEIRA ──
+// Senha para exclusão definitiva: variável DELETE_PASSWORD no Railway.
+// Sem ela configurada, a exclusão definitiva fica bloqueada por segurança.
 
-  <footer class="bg-black text-warmgray text-center py-8 mt-16">
-    <div class="font-display italic font-light text-sm" style="letter-spacing:1.5px">O que é raro merece ser encontrado.</div>
-  </footer>
+app.post('/pedidos/:id/excluir', (req, res) => {
+  store.moverParaLixeira(req.params.id);
+  res.redirect('/?aba=lixeira');
+});
 
-  <style>[x-cloak]{display:none!important}</style>
-</body>
-</html>
+app.post('/pedidos/:id/restaurar', (req, res) => {
+  store.restaurarDaLixeira(req.params.id);
+  res.redirect('/?aba=lixeira');
+});
+
+app.post('/pedidos/:id/excluir-definitivo', (req, res) => {
+  const senhaConfigurada = process.env.DELETE_PASSWORD;
+  if (!senhaConfigurada) {
+    return res.status(400).render('erro', {
+      msg: 'A exclusão definitiva está bloqueada: configure a variável DELETE_PASSWORD no Railway para habilitá-la.'
+    });
+  }
+  if (req.body.senha !== senhaConfigurada) {
+    return res.status(403).render('erro', { msg: 'Senha incorreta. O pedido permanece na lixeira.' });
+  }
+  const fotos = store.excluirDefinitivo(req.params.id);
+  // apaga também os arquivos de foto locais do pedido
+  for (const f of fotos) {
+    const caminho = join(UPLOAD_DIR, f.replace('/uploads/', ''));
+    fs.unlink(caminho, () => {}); // ignora se já não existir
+  }
+  res.redirect('/?aba=lixeira');
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`✓ LK Compras rodando em http://localhost:${PORT}`));
+
+// ── CRON INTERNO: verificação automática de atrasos ──
+// Roda no boot e depois a cada 1 hora. Seguro contra spam: cada pedido só é
+// avisado uma vez (aviso_atraso_em), então as checagens repetidas não reenviam.
+// Sem necessidade de serviço cron separado nem Volume compartilhado no Railway.
+const UMA_HORA = 60 * 60 * 1000;
+
+async function verificarAtrasosAutomatico() {
+  try {
+    const atrasados = store.pedidosAtrasadosNaoAvisados();
+    if (!atrasados.length) return;
+    const r = await enviarAlertaAtraso(atrasados);
+    if (r.enviado || r.dryRun) {
+      atrasados.forEach(p => store.marcarAvisoEnviado(p.id));
+      console.log(`✓ [cron] ${atrasados.length} pedido(s) atrasado(s) avisado(s) por e-mail.`);
+    } else {
+      console.error(`✗ [cron] envio falhou (${r.erro}) — tentará de novo na próxima hora.`);
+    }
+  } catch (e) {
+    console.error('✗ [cron] erro na verificação de atrasos:', e.message);
+  }
+}
+
+setTimeout(verificarAtrasosAutomatico, 30 * 1000); // 30s após o boot
+setInterval(verificarAtrasosAutomatico, UMA_HORA);  // depois, a cada hora
+
+// ── CRON INTERNO: sincronização do Gmail a cada 30 min ──
+const MEIA_HORA = 30 * 60 * 1000;
+async function sincronizarGmailAutomatico() {
+  if (!gmailConfigurado()) return; // sem credenciais, fica em silêncio
+  const r = await sincronizarGmail();
+  if (r.ok && r.criados > 0) console.log(`✓ [cron-gmail] ${r.criados} pedido(s) novo(s) importado(s).`);
+}
+setTimeout(sincronizarGmailAutomatico, 60 * 1000);  // 1min após o boot
+setInterval(sincronizarGmailAutomatico, MEIA_HORA);
