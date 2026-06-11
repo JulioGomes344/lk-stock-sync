@@ -31,6 +31,7 @@ export function initDb() {
       codigo_rastreio TEXT,
       data_envio      TEXT,
       status          TEXT NOT NULL DEFAULT 'em_transito', -- em_transito | entregue
+      excluido_em     TEXT,                                 -- lixeira de lotes
       criado_em       TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -90,7 +91,8 @@ function migrar() {
       foto_recebida_em: 'TEXT'
     },
     lotes: {
-      codigo_rastreio: 'TEXT'
+      codigo_rastreio: 'TEXT',
+      excluido_em: 'TEXT'
     }
   };
 
