@@ -249,3 +249,9 @@ export function anexarFotoPorPedidoLoja(loja, pedido_loja, foto_url) {
   `).run(foto_url, pedido.id);
   return r.changes;
 }
+
+// Pedido único com itens, semáforo e alertas (para avisos individuais por e-mail).
+export function getPedidoEnriquecido(id) {
+  const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(id);
+  return p ? enriquecer(p) : null;
+}
