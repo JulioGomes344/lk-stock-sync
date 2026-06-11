@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join, extname } from 'path';
 import { nanoid } from 'nanoid';
 import * as store from './store.js';
-import { enviarAlertaAtraso } from './email.js';
+import { enviarAlertaAtraso, enviarAvisoPedido } from './email.js';
 import { initDb } from './init-db.js';
 import { sincronizarGmail, gmailConfigurado } from './gmail.js';
 import { exigirLogin, criarSessao, encerrarSessao, senhaCorreta, senhaConfigurada } from './auth.js';
@@ -145,6 +145,27 @@ app.get('/check-atrasos', async (req, res) => {
     msg = `Encontrei ${atrasados.length} pedido(s) atrasado(s), mas o envio do e-mail falhou (${r.erro}). Os pedidos NÃO foram marcados como avisados — tente de novo após ajustar o SMTP.`;
   }
   res.render('erro', { msg });
+});
+
+// ── AVISO INDIVIDUAL POR PEDIDO: atraso ou prioridade de envio ──
+app.post('/pedidos/:id/avisar', async (req, res) => {
+  const pedido = store.getPedidoEnriquecido(req.params.id);
+  if (!pedido) return res.status(404).render('erro', { msg: 'Pedido não encontrado.' });
+
+  const tipo = req.body.tipo === 'prioridade' ? 'prioridade' : 'atraso';
+  const r = await enviarAvisoPedido(pedido, tipo);
+
+  // aviso manual de atraso conta como avisado: o cron não repete no dia seguinte
+  if (tipo === 'atraso' && (r.enviado || r.dryRun)) store.marcarAvisoEnviado(pedido.id);
+
+  const nomeTipo = tipo === 'prioridade' ? 'priorização de envio' : 'aviso de atraso';
+  res.render('erro', {
+    msg: r.enviado
+      ? `E-mail de ${nomeTipo} do pedido #${pedido.numero_pedido} enviado com sucesso.`
+      : r.dryRun
+        ? `E-mail de ${nomeTipo} processado em modo teste (veja o console).`
+        : `Falha ao enviar o e-mail de ${nomeTipo} (${r.erro}). Tente novamente.`
+  });
 });
 
 // ── LIXEIRA ──
