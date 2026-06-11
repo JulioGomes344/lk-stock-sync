@@ -141,11 +141,11 @@ export function criarLote({ descricao, transportadora, codigo_rastreio, data_env
 }
 
 export function listarLotesAtivos() {
-  return db.prepare(`SELECT * FROM lotes WHERE status = 'em_transito' ORDER BY criado_em DESC`).all();
+  return db.prepare(`SELECT * FROM lotes WHERE status = 'em_transito' AND excluido_em IS NULL ORDER BY criado_em DESC`).all();
 }
 
 export function listarLotesComPedidos() {
-  const lotes = db.prepare('SELECT * FROM lotes ORDER BY criado_em DESC').all();
+  const lotes = db.prepare('SELECT * FROM lotes WHERE excluido_em IS NULL ORDER BY criado_em DESC').all();
   return lotes.map(l => {
     l.pedidos = db.prepare('SELECT * FROM pedidos WHERE lote_id = ? AND excluido_em IS NULL').all(l.id).map(enriquecer);
     return l;
@@ -254,4 +254,39 @@ export function anexarFotoPorPedidoLoja(loja, pedido_loja, foto_url) {
 export function getPedidoEnriquecido(id) {
   const p = db.prepare('SELECT * FROM pedidos WHERE id = ?').get(id);
   return p ? enriquecer(p) : null;
+}
+
+// ── LIXEIRA DE LOTES ──
+// Ao excluir um lote, os pedidos ENVIADOS dele voltam para Pendente (nada se
+// perde); pedidos já ENTREGUES não são tocados. Restaurar traz o lote de volta
+// (vazio, pois os pedidos foram desvinculados). Exclusão definitiva exige senha.
+
+export function moverLoteParaLixeira(lote_id) {
+  const tx = db.transaction(() => {
+    db.prepare(`UPDATE pedidos SET status = 'pendente', lote_id = NULL
+                WHERE lote_id = ? AND status = 'enviado'`).run(lote_id);
+    db.prepare(`UPDATE lotes SET excluido_em = datetime('now') WHERE id = ?`).run(lote_id);
+  });
+  tx();
+}
+
+export function restaurarLoteDaLixeira(lote_id) {
+  db.prepare(`UPDATE lotes SET excluido_em = NULL WHERE id = ?`).run(lote_id);
+}
+
+export function listarLotesLixeira() {
+  const lotes = db.prepare(`SELECT * FROM lotes WHERE excluido_em IS NOT NULL ORDER BY excluido_em DESC`).all();
+  return lotes.map(l => {
+    l.pedidos = db.prepare('SELECT * FROM pedidos WHERE lote_id = ?').all(l.id);
+    return l;
+  });
+}
+
+export function excluirLoteDefinitivo(lote_id) {
+  const tx = db.transaction(() => {
+    // desvincula qualquer pedido remanescente (ex: entregues que mantinham o vínculo histórico)
+    db.prepare(`UPDATE pedidos SET lote_id = NULL WHERE lote_id = ?`).run(lote_id);
+    db.prepare(`DELETE FROM lotes WHERE id = ?`).run(lote_id);
+  });
+  tx();
 }
