@@ -39,7 +39,7 @@
     label{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#8a8580;display:block;margin-bottom:5px;font-weight:400}
     .acao-link{font-size:9px;letter-spacing:2.5px;text-transform:uppercase;min-height:44px;display:inline-flex;align-items:center;cursor:pointer;transition:opacity .2s}
     .acao-link:hover{opacity:.6}
-    .thumb{width:56px;height:56px;object-fit:cover;background:#fff;border:1px solid #e8e6e2;flex-shrink:0}
+    .thumb{width:56px;height:56px;object-fit:contain;background:#fff;border:1px solid #e8e6e2;flex-shrink:0;padding:3px}
     @media (min-width:768px){ .thumb{width:64px;height:64px} }
     [x-cloak]{display:none!important}
   </style>
@@ -292,12 +292,31 @@
             <div><div class="kicker">Data da Compra</div><div class="text-sm font-light mt-1"><%= p.data_compra || '—' %></div></div>
             <% if (p.valor) { %><div><div class="kicker">Valor</div><div class="text-sm font-light mt-1"><%= p.moeda %> <%= p.valor.toFixed(2) %></div></div><% } %>
           </div>
+          <% if (p.status!=='entregue' && aba!=='lixeira') { %>
+            <!-- NOTIFICAÇÕES DESTE PEDIDO -->
+            <div class="mb-5">
+              <div class="kicker mb-2">Notificar por e-mail</div>
+              <div class="flex flex-col md:flex-row gap-2">
+                <form method="POST" action="/pedidos/<%= p.id %>/avisar"
+                      onsubmit="return confirm('Enviar e-mail de AVISO DE ATRASO do pedido #<%= p.numero_pedido %>?')">
+                  <input type="hidden" name="tipo" value="atraso">
+                  <button class="btn btn-out w-full md:w-auto" style="border-color:#c4463a;color:#c4463a">Avisar Atraso</button>
+                </form>
+                <form method="POST" action="/pedidos/<%= p.id %>/avisar"
+                      onsubmit="return confirm('Enviar e-mail de PRIORIZAÇÃO DE ENVIO do pedido #<%= p.numero_pedido %>?')">
+                  <input type="hidden" name="tipo" value="prioridade">
+                  <button class="btn btn-out w-full md:w-auto">Priorizar Envio</button>
+                </form>
+              </div>
+            </div>
+          <% } %>
+
           <!-- ITENS + FOTOS -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-5">
             <% p.itens.forEach(it => { %>
               <div class="flex items-center gap-3 border border-lightgray p-3">
                 <% if (it.foto_url) { %>
-                  <img src="<%= it.foto_url %>" class="w-16 h-16 object-cover flex-shrink-0" style="background:#f5f4f2" loading="lazy">
+                  <img src="<%= it.foto_url %>" class="w-16 h-16 object-contain flex-shrink-0 p-1" style="background:#fff;border:1px solid #e8e6e2" loading="lazy">
                 <% } else { %>
                   <div class="w-16 h-16 flex-shrink-0 flex items-center justify-center text-warmgray text-[8px] tracking-wider uppercase" style="background:#f5f4f2">Sem foto</div>
                 <% } %>
