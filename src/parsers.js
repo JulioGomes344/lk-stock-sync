@@ -15,7 +15,8 @@ const decode = (s) => (s || '')
 export const DOMINIOS = {
   'nude-project.com':  'Nude Project',
   'aimeleondore.com':  'Aimé Leon Dore',
-  'stockx.com':        'StockX'
+  'stockx.com':        'StockX',
+  'goat.com':          'GOAT'   // remetente real: no-reply@e.goat.com (subdomínio)
 };
 // compat: usado pelo gmail.js para montar as buscas IMAP
 export const REMETENTES = Object.fromEntries(Object.entries(DOMINIOS).map(([d, l]) => [d, l]));
@@ -39,7 +40,8 @@ export function ehConfirmacao(loja, subject) {
     /order confirmation/,
     /thank you for your (order|purchase)/,
     /pedido\s*(#?\d+\s*)?confirmado/,  // versões em português
-    /confirma[çc][ãa]o d[eo] pedido/
+    /confirma[çc][ãa]o d[eo] pedido/,
+    /your goat order/                    // GOAT: "Your GOAT order #377805419"
   ];
   // nunca tratar e-mails de envio/entrega como confirmação
   if (/shipped|delivered|out for delivery|enviado|entregue|a caminho/.test(s)) return false;
@@ -143,6 +145,38 @@ function parseStockX({ subject, html }) {
   };
 }
 
+// ── GOAT ──
+// Nº no assunto ("Your GOAT order #377805419"); nome após "You ordered the";
+// tamanho no bloco "US Women's 11.0 (EU 43 W) / New / good condition / SKU: ...";
+// imagem em image.goat.com; total em "Total | $409.76".
+function parseGOAT({ subject, html }) {
+  const pedido = ((subject || '').match(/#(\d{5,})/) || [])[1];
+
+  const txt = html
+    .replace(/&nbsp;/g, ' ').replace(/&#39;|&rsquo;/g, "'").replace(/&amp;/g, '&')
+    .replace(/<[^>]+>/g, '|').replace(/[\u200b-\u200d\ufeff]/g, '')
+    .replace(/\|+/g, '|').replace(/\s+/g, ' ');
+
+  let nome = ((txt.match(/You ordered the ([^|]+?)\s*\|/) || [])[1] || '').trim() || null;
+  // fallback: o texto entre a imagem do produto e o bloco de tamanho
+  if (!nome) {
+    const m = txt.match(/image\.goat\.com[^|]*\|+\s*([^|]{8,120})\s*\|/);
+    nome = m ? m[1].trim() : null;
+  }
+
+  const tamanho = ((txt.match(/\|\s*(US [^|/]+?)\s*\//) || [])[1] || '').trim() || null;
+  const img = ((html.match(/<img[^>]+src="(https:\/\/image\.goat\.com\/[^"]+)"/) || [])[1]) || null;
+  const tot = txt.match(/Total\s*[|\s]*\$\s*([\d.,]+)/);
+  const valor = tot ? parseFloat(tot[1].replace(/,/g, '')) : null;
+
+  if (!pedido && !nome) return null;
+  return {
+    pedido_loja: pedido || null,
+    itens: [{ nome: nome || 'Pedido GOAT', tamanho, qtd: 1, foto_url: img }],
+    valor, moeda: 'USD'
+  };
+}
+
 // ── STOCKX: URL da foto construível a partir do nome ──
 // Padrão validado: https://images.stockx.com/images/{Nome-Com-Hifens}-Product.jpg
 export function urlFotoStockX(nome) {
@@ -170,6 +204,7 @@ export function parsearEmail(loja, { subject, html, text }) {
   if (!ehConfirmacao(loja, subject)) return null;
   try {
     if (loja === 'StockX') return parseStockX({ subject, html });
+    if (loja === 'GOAT') return parseGOAT({ subject, html });
     if (loja === 'Aimé Leon Dore') return parseALD({ subject, html });
     // demais Shopify (Nude Project; Alo/Rhode tendem a seguir o padrão — validar com amostras)
     return parseShopifyPadrao({ subject, html, text });
