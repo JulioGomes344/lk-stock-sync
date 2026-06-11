@@ -240,8 +240,11 @@
                 <span class="badge-sem sem-vermelho"><%= a.msg %></span>
               <% }) %>
             </div>
-            <div class="font-display text-lg md:text-xl font-light mt-1 leading-snug">
-              <%= p.itens.map(i => i.nome + (i.tamanho ? ' · '+i.tamanho : '')).join(' / ') || 'Sem itens' %>
+            <% const titulo = p.itens.length === 0 ? 'Sem itens'
+                 : p.itens.length === 1 ? p.itens[0].nome + (p.itens[0].tamanho ? ' · ' + p.itens[0].tamanho : '')
+                 : p.itens[0].nome + '  +' + (p.itens.length - 1) + (p.itens.length - 1 === 1 ? ' item' : ' itens') %>
+            <div class="font-display text-lg md:text-xl font-light mt-1 leading-snug truncate" title="<%= p.itens.map(i => i.nome).join(' / ') %>">
+              <%= titulo %>
             </div>
             <div class="text-medgray text-xs mt-1 font-light">
               <%= p.qtd_itens %> <%= p.qtd_itens===1?'item':'itens' %>
@@ -447,7 +450,10 @@
                 <% if (fc) { %><img src="<%= fc %>" class="thumb" style="width:44px;height:44px" loading="lazy"><% }
                    else { %><div class="thumb flex items-center justify-center text-warmgray text-[7px] uppercase" style="width:44px;height:44px">—</div><% } %>
                 <div class="flex-1 min-w-0">
-                  <div class="text-sm font-light truncate"><%= p.itens.map(i => i.nome).join(' / ') || 'Sem itens' %></div>
+                  <% const tituloLote = p.itens.length === 0 ? 'Sem itens'
+                       : p.itens.length === 1 ? p.itens[0].nome
+                       : p.itens[0].nome + '  +' + (p.itens.length - 1) + (p.itens.length - 1 === 1 ? ' item' : ' itens') %>
+                  <div class="text-sm font-light truncate" title="<%= p.itens.map(i => i.nome).join(' / ') %>"><%= tituloLote %></div>
                   <div class="text-medgray text-[11px] font-light"><%= p.loja %> · #<%= p.numero_pedido %><% if (p.valor) { %> · <%= p.moeda %> <%= p.valor.toFixed(2) %><% } %></div>
                 </div>
               </div>
@@ -480,7 +486,9 @@
             </div>
             <div x-show="aberto" x-cloak class="mt-3 pt-3 border-t border-lightgray space-y-2">
               <% l.pedidos.forEach(p => { %>
-                <div class="text-sm font-light"><%= p.loja %> #<%= p.numero_pedido %> — <%= p.itens.map(i => i.nome).join(' / ') %></div>
+                <% const tituloHist = p.itens.length <= 1 ? (p.itens[0]?.nome || 'Sem itens')
+                     : p.itens[0].nome + '  +' + (p.itens.length - 1) + (p.itens.length - 1 === 1 ? ' item' : ' itens') %>
+                <div class="text-sm font-light"><%= p.loja %> #<%= p.numero_pedido %> — <%= tituloHist %></div>
               <% }) %>
             </div>
           </div>
