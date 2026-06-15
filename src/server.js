@@ -225,6 +225,29 @@ app.post('/pedidos/:id/excluir-definitivo', (req, res) => {
   res.redirect('/?aba=lixeira');
 });
 
+// ── BACKUP: baixa o arquivo do banco (protegido pelo login) ──
+app.get('/backup', (req, res) => {
+  const arquivo = store.caminhoBanco();
+  const nome = `lk-compras-backup-${new Date().toISOString().slice(0,10)}.db`;
+  res.download(arquivo, nome, (err) => {
+    if (err && !res.headersSent) res.status(500).render('erro', { msg: 'Não foi possível gerar o backup: ' + err.message });
+  });
+});
+
+// ── ZERAR: apaga todos os pedidos/itens/lotes (recomeço) ──
+// Exige a senha DELETE_PASSWORD. Irreversível.
+app.post('/zerar', (req, res) => {
+  const senhaDef = process.env.DELETE_PASSWORD;
+  if (!senhaDef) {
+    return res.status(400).render('erro', { msg: 'Recomeço bloqueado: configure a variável DELETE_PASSWORD no Railway para habilitá-lo.' });
+  }
+  if (req.body.senha !== senhaDef) {
+    return res.status(403).render('erro', { msg: 'Senha incorreta. Nada foi apagado.' });
+  }
+  store.zerarTudo();
+  res.render('erro', { msg: 'Histórico zerado com sucesso. O painel está limpo e pronto para recomeçar a partir de agora.' });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✓ LK Compras rodando em http://localhost:${PORT}`));
 
