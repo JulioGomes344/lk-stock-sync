@@ -191,14 +191,52 @@ export async function enviarAvisoPedido(pedido, tipo) {
 }
 
 // ── Confirmação de compra (botão manual, destinatário escolhível) ──
+// Layout editorial dedicado: foto grande do produto + nome, tamanho e valor.
 export async function enviarConfirmacaoCompra(pedido, destinatarios) {
   const ref = `${pedido.loja}${pedido.pedido_loja ? ' #' + pedido.pedido_loja : ' #' + pedido.numero_pedido}`;
-  const html = montarShell({
-    kicker: 'Confirmação de Compra',
-    corKicker: '#3a7d44',
-    titulo: 'Compra confirmada',
-    texto: 'Registro de confirmação da compra abaixo.',
-    linhas: montarLinhas([pedido], { corPrazo: '#b5b0a8', labelPrazo: pedido.data_compra ? `Compra em ${pedido.data_compra}` : 'compra registrada' })
-  });
+  const item = pedido.itens?.[0] || {};
+  const foto = urlAbsoluta(item.foto_url);
+
+  // bloco de cada item (nome + tamanho), abaixo da foto principal
+  const itensHtml = (pedido.itens || []).map(i => {
+    const tam = i.tamanho ? ` · ${i.tamanho}` : '';
+    const qtd = i.qtd > 1 ? ` · x${i.qtd}` : '';
+    return `<div style="font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:22px;color:#ffffff;line-height:1.35;margin:0 0 6px;">${i.nome}${tam}${qtd}</div>`;
+  }).join('');
+
+  const html = `
+  <div style="background:#0a0a0a;padding:0;margin:0;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#0a0a0a;">
+      <tr><td style="padding:44px 44px 24px;text-align:center;">
+        <img src="${LOGO_BRANCO}" width="110" alt="LK Sneakers" style="display:block;margin:0 auto;">
+      </td></tr>
+      <tr><td style="padding:0 44px;text-align:center;">
+        <div style="font-family:'DM Sans',Arial,sans-serif;font-size:8px;letter-spacing:4px;text-transform:uppercase;color:#3a7d44;">Confirmação de Compra</div>
+        <div style="width:28px;height:1px;background:rgba(255,255,255,0.15);margin:16px auto;"></div>
+        <h1 style="font-family:'Cormorant Garamond',Georgia,serif;font-weight:300;font-size:34px;color:#ffffff;margin:0 0 6px;">Compra confirmada</h1>
+        <div style="font-family:'DM Sans',Arial,sans-serif;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#b5b0a8;">${ref}</div>
+      </td></tr>
+
+      ${foto ? `
+      <tr><td style="padding:32px 44px 0;text-align:center;">
+        <img src="${foto}" width="400" alt="" style="display:block;width:100%;max-width:400px;height:auto;margin:0 auto;background:#ffffff;border:1px solid rgba(255,255,255,0.08);">
+      </td></tr>` : ''}
+
+      <tr><td style="padding:32px 44px 0;text-align:center;">
+        ${itensHtml}
+      </td></tr>
+
+      <tr><td style="padding:20px 44px 0;text-align:center;">
+        <div style="width:28px;height:1px;background:rgba(255,255,255,0.15);margin:0 auto 18px;"></div>
+        ${pedido.valor != null ? `<div style="font-family:'Cormorant Garamond',Georgia,serif;font-weight:400;font-size:30px;color:#ffffff;">${pedido.moeda || 'USD'} ${Number(pedido.valor).toFixed(2)}</div>` : ''}
+        ${pedido.data_compra ? `<div style="font-family:'DM Sans',Arial,sans-serif;font-size:11px;color:#b5b0a8;margin-top:8px;">Compra em ${pedido.data_compra}</div>` : ''}
+      </td></tr>
+
+      <tr><td style="padding:40px 44px 44px;text-align:center;">
+        <div style="font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-weight:300;font-size:12px;color:#b5b0a8;letter-spacing:1.5px;">O que é raro merece ser encontrado.</div>
+      </td></tr>
+    </table>
+  </div>`;
+
   return enviar(`LK · Confirmação de compra — ${ref}`, html, `Pedido: ${ref}`, destinatarios);
 }
