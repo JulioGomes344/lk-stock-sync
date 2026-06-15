@@ -209,6 +209,8 @@
       <% for (const k of ['pendente','enviado','entregue']) { %>
         <a href="/?aba=<%= k %>" class="tab <%= aba===k?'active':'' %>"><%= labels[k] %></a>
       <% } %>
+      <a href="/?aba=prioridade" class="tab <%= aba==='prioridade'?'active':'' %>">Prioridade</a>
+      <a href="/?aba=cancelados" class="tab <%= aba==='cancelados'?'active':'' %>">Cancelados</a>
       <a href="/?aba=lotes" class="tab <%= aba==='lotes'?'active':'' %>">Lotes</a>
       <a href="/?aba=lixeira" class="tab <%= aba==='lixeira'?'active':'' %>" style="margin-left:auto;<%= aba==='lixeira'?'':'color:#b5b0a8' %>">Lixeira</a>
     </div>
@@ -223,7 +225,7 @@
     <% if (pedidos.length === 0) { %>
       <div class="py-16 md:py-20 text-center border border-lightgray bg-white">
         <div class="kicker mb-2"><%= aba==='lixeira' ? 'Lixeira' : labels[aba] || aba %></div>
-        <p class="font-display text-xl font-light text-medgray"><%= aba==='lixeira' ? 'A lixeira está vazia.' : 'Nenhum pedido nesta aba.' %></p>
+        <p class="font-display text-xl font-light text-medgray"><%= aba==='lixeira' ? 'A lixeira está vazia.' : aba==='prioridade' ? 'Nenhum pedido priorizado.' : aba==='cancelados' ? 'Nenhum pedido cancelado.' : 'Nenhum pedido nesta aba.' %></p>
       </div>
     <% } %>
 
@@ -273,7 +275,11 @@
 
             <div class="flex items-center gap-5 mt-2">
               <button @click="open=!open" class="acao-link" style="color:#0a0a0a" x-text="open ? 'Fechar' : 'Detalhes'"></button>
-              <% if (aba !== 'lixeira') { %>
+              <% if (aba !== 'lixeira' && aba !== 'cancelados') { %>
+                <form method="POST" action="/pedidos/<%= p.id %>/cancelar"
+                      onsubmit="return confirm('Marcar o pedido #<%= p.numero_pedido %> como CANCELADO?')">
+                  <button class="acao-link" style="color:#92620a">Cancelar</button>
+                </form>
                 <form method="POST" action="/pedidos/<%= p.id %>/excluir"
                       onsubmit="return confirm('Mover o pedido #<%= p.numero_pedido %> para a lixeira?')">
                   <button class="acao-link" style="color:#c4463a">Excluir</button>
@@ -282,6 +288,23 @@
             </div>
           </div>
         </div>
+
+        <% if (aba === 'cancelados') { %>
+          <!-- AÇÕES DA ABA CANCELADOS -->
+          <div class="mt-4 pt-4 border-t border-lightgray flex flex-col md:flex-row md:items-center gap-3">
+            <span class="text-medgray text-[10px] font-light">Cancelado em <%= (p.cancelado_em || '').slice(0,16) %></span>
+            <div class="flex flex-wrap items-center gap-2 md:ml-auto">
+              <form method="POST" action="/pedidos/<%= p.id %>/recompra"
+                    onsubmit="return confirm('Confirmar a RECOMPRA do pedido #<%= p.numero_pedido %>? Ele volta para Pendente com a data de compra de hoje.')">
+                <button class="btn btn-dark" style="background:#3a7d44">Confirmei a recompra</button>
+              </form>
+              <form method="POST" action="/pedidos/<%= p.id %>/excluir"
+                    onsubmit="return confirm('Mover o pedido cancelado #<%= p.numero_pedido %> para a lixeira?')">
+                <button class="btn btn-out" style="border-color:#c4463a;color:#c4463a">Excluir</button>
+              </form>
+            </div>
+          </div>
+        <% } %>
 
         <% if (aba === 'lixeira') { %>
           <!-- AÇÕES DA LIXEIRA -->
@@ -315,7 +338,7 @@
             <div><div class="kicker">Data da Compra</div><div class="text-sm font-light mt-1"><%= p.data_compra || '—' %></div></div>
             <% if (p.valor) { %><div><div class="kicker">Valor</div><div class="text-sm font-light mt-1"><%= p.moeda %> <%= p.valor.toFixed(2) %></div></div><% } %>
           </div>
-          <% if (p.status!=='entregue' && aba!=='lixeira') { %>
+          <% if (p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') { %>
             <!-- NOTIFICAÇÕES DESTE PEDIDO -->
             <div class="mb-5" x-data="{ destino: '<%= destinatariosPadrao %>' }">
               <div class="kicker mb-2">Notificar por e-mail</div>
@@ -359,7 +382,7 @@
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-light truncate"><%= it.nome %></div>
                   <div class="text-medgray text-xs"><%= it.tamanho || '—' %> · qtd <%= it.qtd %></div>
-                  <% if (p.status!=='entregue' && aba!=='lixeira') { %>
+                  <% if (p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') { %>
                     <form method="POST" action="/itens/<%= it.id %>/foto" enctype="multipart/form-data" class="mt-2">
                       <input type="file" name="foto" accept="image/*" class="text-[11px]" style="border:none;padding:0" onchange="this.form.submit()">
                     </form>
@@ -370,7 +393,7 @@
           </div>
 
           <!-- AÇÃO: ENVIAR (só na aba pendente) -->
-          <% if (p.status==='pendente' && aba!=='lixeira') { %>
+          <% if (p.status==='pendente' && aba!=='lixeira' && aba!=='cancelados') { %>
             <form method="POST" action="/pedidos/<%= p.id %>/enviar" class="flex flex-col md:flex-row md:items-end gap-3">
               <div class="flex-1 md:min-w-[200px]">
                 <label>Vincular ao Lote (obrigatório)</label>
