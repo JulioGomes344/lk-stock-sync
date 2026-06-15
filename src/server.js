@@ -50,12 +50,15 @@ app.use(exigirLogin);
 
 // ── DASHBOARD (3 abas) ──
 app.get('/', (req, res) => {
-  const aba = ['pendente', 'enviado', 'entregue', 'lotes', 'lixeira'].includes(req.query.aba) ? req.query.aba : 'pendente';
+  const aba = ['pendente', 'enviado', 'entregue', 'prioridade', 'cancelados', 'lotes', 'lixeira'].includes(req.query.aba) ? req.query.aba : 'pendente';
   res.render('dashboard', {
     aba,
     resumo: store.resumo(),
     resumoSemaforo: store.resumoSemaforo(),
-    pedidos: aba === 'lixeira' ? store.listarLixeira() : store.listarPorStatus(aba),
+    pedidos: aba === 'lixeira' ? store.listarLixeira()
+           : aba === 'prioridade' ? store.listarPrioridade()
+           : aba === 'cancelados' ? store.listarCancelados()
+           : store.listarPorStatus(aba),
     lotes: store.listarLotesComPedidos(),
     lotesLixeira: aba === 'lixeira' ? store.listarLotesLixeira() : [],
     lotesAtivos: store.listarLotesAtivos(),
@@ -147,6 +150,17 @@ app.get('/check-atrasos', async (req, res) => {
     msg = `Encontrei ${atrasados.length} pedido(s) atrasado(s), mas o envio do e-mail falhou (${r.erro}). Os pedidos NÃO foram marcados como avisados — tente de novo após ajustar o SMTP.`;
   }
   res.render('erro', { msg });
+});
+
+// ── CANCELAMENTO E RECOMPRA ──
+app.post('/pedidos/:id/cancelar', (req, res) => {
+  store.marcarCancelado(req.params.id);
+  res.redirect('/?aba=cancelados');
+});
+
+app.post('/pedidos/:id/recompra', (req, res) => {
+  store.confirmarRecompra(req.params.id);
+  res.redirect('/?aba=pendente');
 });
 
 // ── CONFIRMAÇÃO DE COMPRA (botão, destinatário escolhível) ──
