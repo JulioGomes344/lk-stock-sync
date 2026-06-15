@@ -180,7 +180,7 @@ export function resumo() {
 export function pedidosAtrasadosNaoAvisados() {
   const rows = db.prepare(`
     SELECT * FROM pedidos
-    WHERE status != 'entregue' AND aviso_atraso_em IS NULL AND excluido_em IS NULL
+    WHERE status NOT IN ('entregue','cancelado') AND aviso_atraso_em IS NULL AND excluido_em IS NULL
   `).all();
   return rows
     .map(enriquecer)
@@ -193,7 +193,7 @@ export function marcarAvisoEnviado(pedido_id) {
 
 // Conta por cor — usado nos KPIs do topo
 export function resumoSemaforo() {
-  const rows = db.prepare(`SELECT * FROM pedidos WHERE status != 'entregue' AND excluido_em IS NULL`).all().map(enriquecer);
+  const rows = db.prepare(`SELECT * FROM pedidos WHERE status NOT IN ('entregue','cancelado') AND excluido_em IS NULL`).all().map(enriquecer);
   const r = { verde: 0, amarelo: 0, vermelho: 0 };
   rows.forEach(p => r[p.semaforo.cor]++);
   return r;
@@ -313,4 +313,51 @@ export function marcarCompraConfirmada(pedido_id) {
 }
 export function marcarPrioridadeEnviada(pedido_id) {
   db.prepare(`UPDATE pedidos SET prioridade_enviada_em = datetime('now') WHERE id = ?`).run(pedido_id);
+}
+
+// ── PRIORIDADE ──
+// Agrupa pedidos com e-mail de prioridade enviado, que ainda não chegaram.
+export function listarPrioridade() {
+  const rows = db.prepare(`
+    SELECT * FROM pedidos
+    WHERE prioridade_enviada_em IS NOT NULL
+      AND status NOT IN ('entregue','cancelado')
+      AND excluido_em IS NULL
+    ORDER BY prioridade_enviada_em DESC
+  `).all();
+  return rows.map(enriquecer);
+}
+
+// ── CANCELAMENTOS ──
+export function marcarCancelado(pedido_id) {
+  db.prepare(`UPDATE pedidos SET status = 'cancelado', cancelado_em = datetime('now'), lote_id = NULL WHERE id = ?`).run(pedido_id);
+}
+
+export function listarCancelados() {
+  const rows = db.prepare(`
+    SELECT * FROM pedidos
+    WHERE status = 'cancelado' AND excluido_em IS NULL
+    ORDER BY cancelado_em DESC
+  `).all();
+  return rows.map(enriquecer);
+}
+
+// Confirmar recompra: volta para Pendente com a data da compra = hoje.
+export function confirmarRecompra(pedido_id) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  db.prepare(`
+    UPDATE pedidos
+    SET status = 'pendente', cancelado_em = NULL, data_compra = ?,
+        aviso_atraso_em = NULL, prioridade_enviada_em = NULL
+    WHERE id = ?
+  `).run(hoje, pedido_id);
+}
+
+// Marca pedido como cancelado pelo nº da loja (para o futuro parser de cancelamento).
+export function marcarCanceladoPorPedidoLoja(loja, pedido_loja) {
+  if (!pedido_loja) return 0;
+  const p = db.prepare(`SELECT id FROM pedidos WHERE loja = ? AND pedido_loja = ? AND status != 'cancelado'`).get(loja, pedido_loja);
+  if (!p) return 0;
+  marcarCancelado(p.id);
+  return 1;
 }
