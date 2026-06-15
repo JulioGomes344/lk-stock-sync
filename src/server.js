@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join, extname } from 'path';
 import { nanoid } from 'nanoid';
 import * as store from './store.js';
-import { enviarAlertaAtraso, enviarAvisoPedido } from './email.js';
+import { enviarAlertaAtraso, enviarAvisoPedido, enviarConfirmacaoCompra, destinatariosPadrao } from './email.js';
 import { initDb } from './init-db.js';
 import { sincronizarGmail, gmailConfigurado } from './gmail.js';
 import { exigirLogin, criarSessao, encerrarSessao, senhaCorreta, senhaConfigurada } from './auth.js';
@@ -59,7 +59,8 @@ app.get('/', (req, res) => {
     lotes: store.listarLotesComPedidos(),
     lotesLixeira: aba === 'lixeira' ? store.listarLotesLixeira() : [],
     lotesAtivos: store.listarLotesAtivos(),
-    LOJAS: store.listarLojas()
+    LOJAS: store.listarLojas(),
+    destinatariosPadrao: destinatariosPadrao()
   });
 });
 
@@ -148,6 +149,27 @@ app.get('/check-atrasos', async (req, res) => {
   res.render('erro', { msg });
 });
 
+// ── CONFIRMAÇÃO DE COMPRA (botão, destinatário escolhível) ──
+app.post('/pedidos/:id/confirmar-compra', async (req, res) => {
+  const pedido = store.getPedidoEnriquecido(req.params.id);
+  if (!pedido) return res.status(404).render('erro', { msg: 'Pedido não encontrado.' });
+
+  // destinatário(s): campo do form, separado por vírgula; vazio usa o padrão
+  const destinatarios = (req.body.destinatario || '')
+    .split(',').map(e => e.trim()).filter(Boolean);
+
+  const r = await enviarConfirmacaoCompra(pedido, destinatarios);
+  if (r.enviado || r.dryRun) store.marcarCompraConfirmada(pedido.id);
+
+  res.render('erro', {
+    msg: r.enviado
+      ? `E-mail de confirmação de compra do pedido #${pedido.numero_pedido} enviado${destinatarios.length ? ' para ' + destinatarios.join(', ') : ''}.`
+      : r.dryRun
+        ? `Confirmação de compra processada em modo teste (veja o console).`
+        : `Falha ao enviar a confirmação de compra (${r.erro}).`
+  });
+});
+
 // ── LIXEIRA DE LOTES ──
 app.post('/lotes/:id/excluir', (req, res) => {
   store.moverLoteParaLixeira(req.params.id);
@@ -179,8 +201,11 @@ app.post('/pedidos/:id/avisar', async (req, res) => {
   const tipo = req.body.tipo === 'prioridade' ? 'prioridade' : 'atraso';
   const r = await enviarAvisoPedido(pedido, tipo);
 
-  // aviso manual de atraso conta como avisado: o cron não repete no dia seguinte
-  if (tipo === 'atraso' && (r.enviado || r.dryRun)) store.marcarAvisoEnviado(pedido.id);
+  // registra a notificação enviada
+  if (r.enviado || r.dryRun) {
+    if (tipo === 'atraso') store.marcarAvisoEnviado(pedido.id);       // cron não repete
+    if (tipo === 'prioridade') store.marcarPrioridadeEnviada(pedido.id);
+  }
 
   const nomeTipo = tipo === 'prioridade' ? 'priorização de envio' : 'aviso de atraso';
   res.render('erro', {
