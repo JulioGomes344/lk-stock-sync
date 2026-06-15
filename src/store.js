@@ -306,3 +306,11 @@ export function zerarTudo() {
 export function caminhoBanco() {
   return db.name;
 }
+
+// ── REGISTRO DE NOTIFICAÇÕES POR PEDIDO ──
+export function marcarCompraConfirmada(pedido_id) {
+  db.prepare(`UPDATE pedidos SET compra_confirmada_em = datetime('now') WHERE id = ?`).run(pedido_id);
+}
+export function marcarPrioridadeEnviada(pedido_id) {
+  db.prepare(`UPDATE pedidos SET prioridade_enviada_em = datetime('now') WHERE id = ?`).run(pedido_id);
+}
