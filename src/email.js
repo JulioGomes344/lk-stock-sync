@@ -17,6 +17,9 @@ const FROM = process.env.ALERT_FROM || 'LK Sneakers <contato@lksneakers.com.br>'
 const TO = (process.env.ALERT_TO || 'contato@lksneakers.com.br')
   .split(',').map(e => e.trim()).filter(Boolean);
 
+// Destinatários padrão (para pré-preencher o campo de confirmação no painel)
+export const destinatariosPadrao = () => TO.join(', ');
+
 // URL pública do app — usada para transformar fotos locais (/uploads/...) em
 // links absolutos que funcionam dentro do e-mail.
 // Railway injeta RAILWAY_PUBLIC_DOMAIN automaticamente; APP_URL tem prioridade se definida.
@@ -101,11 +104,12 @@ function montarShell({ kicker, corKicker = '#c4463a', titulo, texto, linhas }) {
 }
 
 // Envio bruto via API do Resend (com dry-run e timeout).
-async function enviar(subject, html, resumoLog) {
+async function enviar(subject, html, resumoLog, destinatarios) {
+  const to = (Array.isArray(destinatarios) && destinatarios.length) ? destinatarios : TO;
 
   if (DRY) {
     console.log('─── [DRY RUN] E-mail (configure SMTP_PASS com a API key do Resend) ───');
-    console.log('Para:', TO.join(', '), '| Assunto:', subject);
+    console.log('Para:', to.join(', '), '| Assunto:', subject);
     if (resumoLog) console.log(resumoLog);
     return { enviado: false, dryRun: true };
   }
@@ -121,7 +125,7 @@ async function enviar(subject, html, resumoLog) {
         'Authorization': `Bearer ${API_KEY}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ from: FROM, to: TO, subject, html }),
+      body: JSON.stringify({ from: FROM, to, subject, html }),
       signal: ctrl.signal
     });
     clearTimeout(timer);
@@ -184,4 +188,17 @@ export async function enviarAvisoPedido(pedido, tipo) {
     linhas: montarLinhas([pedido])
   });
   return enviar(`LK · Pedido atrasado — ${ref}`, html, `Pedido: ${ref}`);
+}
+
+// ── Confirmação de compra (botão manual, destinatário escolhível) ──
+export async function enviarConfirmacaoCompra(pedido, destinatarios) {
+  const ref = `${pedido.loja}${pedido.pedido_loja ? ' #' + pedido.pedido_loja : ' #' + pedido.numero_pedido}`;
+  const html = montarShell({
+    kicker: 'Confirmação de Compra',
+    corKicker: '#3a7d44',
+    titulo: 'Compra confirmada',
+    texto: 'Registro de confirmação da compra abaixo.',
+    linhas: montarLinhas([pedido], { corPrazo: '#b5b0a8', labelPrazo: pedido.data_compra ? `Compra em ${pedido.data_compra}` : 'compra registrada' })
+  });
+  return enviar(`LK · Confirmação de compra — ${ref}`, html, `Pedido: ${ref}`, destinatarios);
 }
