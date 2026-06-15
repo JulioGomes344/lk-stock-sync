@@ -32,6 +32,7 @@
     .card-sem{border-left:3px solid var(--c, transparent)}
     .badge-sem{font-size:8px;letter-spacing:2px;text-transform:uppercase;padding:4px 9px;color:var(--c);background:var(--bg);font-weight:500;white-space:nowrap}
     .badge-auto{font-size:8px;letter-spacing:2px;text-transform:uppercase;padding:4px 9px;background:#fff;color:#0a0a0a;border:1px solid #e8e6e2;font-weight:500;white-space:nowrap}
+    .badge-status{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;padding:4px 9px;background:rgba(58,125,68,.10);color:#3a7d44;font-weight:500;white-space:nowrap}
     .dot{width:8px;height:8px;border-radius:50%;background:var(--c);display:inline-block;flex-shrink:0}
     input,select{font-family:'DM Sans';font-size:16px;border:1px solid #e8e6e2;padding:12px;background:#fff;width:100%;border-radius:0;transition:border-color .2s}
     @media (min-width:768px){ input,select{font-size:13px;padding:10px 12px} }
@@ -250,6 +251,9 @@
                 <span class="badge-sem sem-<%= p.semaforo.cor %>"><%= p.semaforo.label %><% if (p.semaforo.dias != null) { %> · <%= p.semaforo.dias %>d<% } %></span>
               <% } %>
               <% if (p.origem==='email') { %><span class="badge-auto">Auto · Gmail</span><% } %>
+              <% if (p.compra_confirmada_em) { %><span class="badge-status">✓ Compra confirmada</span><% } %>
+              <% if (p.aviso_atraso_em) { %><span class="badge-status">✓ Atraso avisado</span><% } %>
+              <% if (p.prioridade_enviada_em) { %><span class="badge-status">✓ Prioridade enviada</span><% } %>
               <% p.alertas.forEach(a => { %>
                 <span class="badge-sem sem-vermelho"><%= a.msg %></span>
               <% }) %>
@@ -313,8 +317,21 @@
           </div>
           <% if (p.status!=='entregue' && aba!=='lixeira') { %>
             <!-- NOTIFICAÇÕES DESTE PEDIDO -->
-            <div class="mb-5">
+            <div class="mb-5" x-data="{ destino: '<%= destinatariosPadrao %>' }">
               <div class="kicker mb-2">Notificar por e-mail</div>
+
+              <!-- Confirmação de compra com destinatário escolhível -->
+              <form method="POST" action="/pedidos/<%= p.id %>/confirmar-compra" class="mb-2"
+                    onsubmit="return confirm('Enviar e-mail de CONFIRMAÇÃO DE COMPRA do pedido #<%= p.numero_pedido %>?')">
+                <div class="flex flex-col md:flex-row gap-2 md:items-center">
+                  <input type="text" name="destinatario" x-model="destino"
+                         placeholder="destinatário(s) separados por vírgula"
+                         class="flex-1" style="max-width:380px">
+                  <button class="btn btn-out w-full md:w-auto" style="border-color:#3a7d44;color:#3a7d44">Confirmar Compra</button>
+                </div>
+                <p class="text-medgray text-[10px] mt-1 font-light">Pré-preenchido com os e-mails padrão; edite para enviar a outro destinatário.</p>
+              </form>
+
               <div class="flex flex-col md:flex-row gap-2">
                 <form method="POST" action="/pedidos/<%= p.id %>/avisar"
                       onsubmit="return confirm('Enviar e-mail de AVISO DE ATRASO do pedido #<%= p.numero_pedido %>?')">
