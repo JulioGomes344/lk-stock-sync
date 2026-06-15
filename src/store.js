@@ -290,3 +290,19 @@ export function excluirLoteDefinitivo(lote_id) {
   });
   tx();
 }
+
+// ── RECOMEÇO: apaga TODOS os pedidos, itens e lotes ──
+// Irreversível. Protegido por senha na camada do servidor. Faça backup antes.
+export function zerarTudo() {
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM itens').run();
+    db.prepare('DELETE FROM pedidos').run();
+    db.prepare('DELETE FROM lotes').run();
+  });
+  tx();
+}
+
+// Caminho do arquivo do banco (para a rota de backup/download).
+export function caminhoBanco() {
+  return db.name;
+}
