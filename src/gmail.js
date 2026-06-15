@@ -20,6 +20,9 @@ import { identificarLoja, parsearEmail, ehConfirmacao, extrairNumeroPedidoGeneri
 const USER = process.env.GMAIL_USER;
 const PASS = process.env.GMAIL_APP_PASSWORD;
 const DIAS = parseInt(process.env.GMAIL_DIAS || '30');
+// Data de corte fixa (opcional): GMAIL_DESDE=2026-06-11 ignora qualquer e-mail
+// anterior a essa data, independentemente da janela de dias. Tem prioridade.
+const DESDE_FIXA = process.env.GMAIL_DESDE ? new Date(process.env.GMAIL_DESDE + 'T00:00:00Z') : null;
 
 export const gmailConfigurado = () => !!(USER && PASS);
 
@@ -48,7 +51,8 @@ export async function sincronizarGmail() {
   });
 
   const resultado = { ok: true, processados: 0, criados: 0, ignorados: 0, erros: [] };
-  const desde = new Date(Date.now() - DIAS * 86400000);
+  // corte: a data fixa (GMAIL_DESDE) tem prioridade sobre a janela de dias
+  const desde = DESDE_FIXA || new Date(Date.now() - DIAS * 86400000);
 
   try {
     await client.connect();
@@ -76,6 +80,9 @@ export async function sincronizarGmail() {
           try {
             const mail = await simpleParser(msg.source);
             const messageId = mail.messageId || `uid-${msg.uid}@${remetente}`;
+
+            // reforço do corte por data: ignora e-mails anteriores à data definida
+            if (DESDE_FIXA && mail.date && mail.date < DESDE_FIXA) { resultado.ignorados++; continue; }
 
             // dedup 1: e-mail já processado
             if (store.emailJaProcessado(messageId)) { resultado.ignorados++; continue; }
