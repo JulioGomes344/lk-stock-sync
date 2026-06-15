@@ -60,6 +60,7 @@
   </header>
 
   <main class="w-full max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 flex-1" x-data="{ modal:null, busca:'', filtroSem:'' }">
+    <% const labels = {pendente:'Pendente', enviado:'Enviado', entregue:'Entregue', prioridade:'Prioridade', cancelados:'Cancelados', lotes:'Lotes', lixeira:'Lixeira'} %>
 
     <!-- TÍTULO DA PÁGINA -->
     <div class="mb-8 md:mb-10">
@@ -69,14 +70,20 @@
     </div>
 
     <!-- KPIs (aba ativa destacada) -->
-    <div class="grid grid-cols-3 gap-px bg-lightgray border border-lightgray mb-6 md:mb-8">
-      <% const labels = {pendente:'Pendente', enviado:'Enviado', entregue:'Entregue'} %>
-      <% for (const [k,v] of Object.entries(resumo)) { %>
-        <a href="/?aba=<%= k %>" class="p-4 md:p-6 text-center transition <%= aba===k ? 'bg-black text-white' : 'bg-white hover:bg-offwhite' %>">
-          <div class="font-display text-3xl md:text-4xl font-light"><%= v %></div>
-          <div class="kicker mt-1 md:mt-2" style="<%= aba===k ? 'color:#b5b0a8' : '' %>"><%= labels[k] %></div>
+    <% const kpis = [
+         { aba:'pendente',   label:'Pendente',  valor: resumo.pendente },
+         { aba:'enviado',    label:'Enviado',   valor: resumo.enviado },
+         { aba:'entregue',   label:'Entregue',  valor: resumo.entregue },
+         { aba:'prioridade', label:'Prioridade',valor: resumo.prioridade },
+         { aba:'cancelados', label:'Cancelados',valor: resumo.cancelado }
+       ] %>
+    <div class="grid grid-cols-3 md:grid-cols-5 gap-px bg-lightgray border border-lightgray mb-6 md:mb-8">
+      <% kpis.forEach(k => { %>
+        <a href="/?aba=<%= k.aba %>" class="p-4 md:p-6 text-center transition <%= aba===k.aba ? 'bg-black text-white' : 'bg-white hover:bg-offwhite' %>">
+          <div class="font-display text-3xl md:text-4xl font-light"><%= k.valor %></div>
+          <div class="kicker mt-1 md:mt-2" style="<%= aba===k.aba ? 'color:#b5b0a8' : '' %>"><%= k.label %></div>
         </a>
-      <% } %>
+      <% }) %>
     </div>
 
     <!-- SEMÁFORO DE PRAZO -->
