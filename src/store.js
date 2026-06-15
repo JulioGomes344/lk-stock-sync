@@ -170,9 +170,15 @@ export function anexarFoto(item_id, foto_url) {
 // ── RESUMO / KPIs ──
 export function resumo() {
   const r = {};
-  for (const s of ['pendente', 'enviado', 'entregue']) {
+  for (const s of ['pendente', 'enviado', 'entregue', 'cancelado']) {
     r[s] = db.prepare('SELECT COUNT(*) c FROM pedidos WHERE status = ? AND excluido_em IS NULL').get(s).c;
   }
+  // prioridade: pedidos com e-mail de prioridade enviado, ainda não chegados/cancelados
+  r.prioridade = db.prepare(`
+    SELECT COUNT(*) c FROM pedidos
+    WHERE prioridade_enviada_em IS NOT NULL
+      AND status NOT IN ('entregue','cancelado') AND excluido_em IS NULL
+  `).get().c;
   return r;
 }
 
