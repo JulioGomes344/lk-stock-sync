@@ -394,3 +394,13 @@ export function marcarCanceladoPorNome(loja, nome) {
 export function salvarRedirecionamento(pedido_id, texto) {
   db.prepare(`UPDATE pedidos SET redirecionar_para = ? WHERE id = ?`).run((texto || '').trim() || null, pedido_id);
 }
+
+// Alterna o tipo de origem do pedido: não definido → estoque → encomenda → não definido.
+export function alternarTipoOrigem(pedido_id) {
+  const p = db.prepare('SELECT tipo_origem FROM pedidos WHERE id = ?').get(pedido_id);
+  if (!p) return;
+  const proximo = p.tipo_origem === 'estoque' ? 'encomenda'
+                : p.tipo_origem === 'encomenda' ? null
+                : 'estoque';
+  db.prepare('UPDATE pedidos SET tipo_origem = ? WHERE id = ?').run(proximo, pedido_id);
+}
