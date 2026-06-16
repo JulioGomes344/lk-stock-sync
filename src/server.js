@@ -152,9 +152,9 @@ app.get('/check-atrasos', async (req, res) => {
   res.render('erro', { msg });
 });
 
-// ── TIPO DE ORIGEM: alterna estoque / encomenda / não definido ──
+// ── TIPO DE ORIGEM: seleção direta (estoque / encomenda; clicar no ativo limpa) ──
 app.post('/pedidos/:id/tipo-origem', (req, res) => {
-  store.alternarTipoOrigem(req.params.id);
+  store.definirTipoOrigem(req.params.id, req.body.tipo);
   res.redirect(req.get('Referrer') || '/');
 });
 
