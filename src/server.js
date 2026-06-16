@@ -152,6 +152,12 @@ app.get('/check-atrasos', async (req, res) => {
   res.render('erro', { msg });
 });
 
+// ── REDIRECIONAMENTO DA COMPRA (texto livre, salvo no pedido) ──
+app.post('/pedidos/:id/redirecionar', (req, res) => {
+  store.salvarRedirecionamento(req.params.id, req.body.redirecionar_para);
+  res.redirect(req.get('Referrer') || '/');
+});
+
 // ── CANCELAMENTO E RECOMPRA ──
 app.post('/pedidos/:id/cancelar', (req, res) => {
   store.marcarCancelado(req.params.id);
