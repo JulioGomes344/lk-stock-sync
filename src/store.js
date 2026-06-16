@@ -395,12 +395,11 @@ export function salvarRedirecionamento(pedido_id, texto) {
   db.prepare(`UPDATE pedidos SET redirecionar_para = ? WHERE id = ?`).run((texto || '').trim() || null, pedido_id);
 }
 
-// Alterna o tipo de origem do pedido: não definido → estoque → encomenda → não definido.
-export function alternarTipoOrigem(pedido_id) {
+// Define o tipo de origem. Clicar no tipo já ativo limpa (volta a não definido).
+export function definirTipoOrigem(pedido_id, tipo) {
   const p = db.prepare('SELECT tipo_origem FROM pedidos WHERE id = ?').get(pedido_id);
   if (!p) return;
-  const proximo = p.tipo_origem === 'estoque' ? 'encomenda'
-                : p.tipo_origem === 'encomenda' ? null
-                : 'estoque';
-  db.prepare('UPDATE pedidos SET tipo_origem = ? WHERE id = ?').run(proximo, pedido_id);
+  const valido = (tipo === 'estoque' || tipo === 'encomenda') ? tipo : null;
+  const novo = (p.tipo_origem === valido) ? null : valido;   // clicar no ativo desmarca
+  db.prepare('UPDATE pedidos SET tipo_origem = ? WHERE id = ?').run(novo, pedido_id);
 }
