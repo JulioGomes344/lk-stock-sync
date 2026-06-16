@@ -46,6 +46,7 @@ export function initDb() {
       moeda         TEXT DEFAULT 'USD',
       status        TEXT NOT NULL DEFAULT 'pendente', -- pendente | enviado | entregue | cancelado
       cancelado_em  TEXT,                            -- quando foi marcado como cancelado
+      redirecionar_para TEXT,                          -- texto livre: quem recebe/redireciona a compra
       origem        TEXT NOT NULL DEFAULT 'manual',   -- manual | email
       email_id      TEXT,
       lote_id       TEXT,
@@ -91,7 +92,8 @@ function migrar() {
       excluido_em: 'TEXT',
       compra_confirmada_em: 'TEXT',
       prioridade_enviada_em: 'TEXT',
-      cancelado_em: 'TEXT'
+      cancelado_em: 'TEXT',
+      redirecionar_para: 'TEXT'
     },
     itens: {
       foto_recebida_em: 'TEXT'
