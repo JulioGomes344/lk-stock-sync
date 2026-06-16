@@ -366,21 +366,22 @@
               </div>
             </form>
 
-            <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem">
+            <div>
               <label>Origem do produto</label>
-              <div class="flex items-center gap-3">
-                <button class="btn btn-out w-full md:w-auto">
-                  <% if (p.tipo_origem === 'estoque') { %>Estoque ↻
-                  <% } else if (p.tipo_origem === 'encomenda') { %>Encomenda ↻
-                  <% } else { %>Definir origem<% } %>
-                </button>
-                <span class="text-medgray text-[10px] font-light">
-                  <% if (p.tipo_origem === 'estoque') { %>Clique para mudar p/ Encomenda
-                  <% } else if (p.tipo_origem === 'encomenda') { %>Clique para limpar
-                  <% } else { %>Estoque / Encomenda<% } %>
-                </span>
+              <div class="flex items-center gap-2">
+                <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
+                  <input type="hidden" name="tipo" value="estoque">
+                  <button class="btn w-full md:w-auto <%= p.tipo_origem === 'estoque' ? 'btn-dark' : 'btn-out' %>"
+                          <% if (p.tipo_origem === 'estoque') { %>style="background:#3a7d44"<% } %>>Estoque</button>
+                </form>
+                <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
+                  <input type="hidden" name="tipo" value="encomenda">
+                  <button class="btn w-full md:w-auto <%= p.tipo_origem === 'encomenda' ? 'btn-dark' : 'btn-out' %>"
+                          <% if (p.tipo_origem === 'encomenda') { %>style="background:#92620a"<% } %>>Encomenda</button>
+                </form>
               </div>
-            </form>
+              <p class="text-medgray text-[10px] mt-1 font-light">Clique para selecionar; clique de novo no ativo para limpar.</p>
+            </div>
           </div>
           <% } %>
           <% if (p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') { %>
