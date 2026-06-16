@@ -15,7 +15,7 @@
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import * as store from './store.js';
-import { identificarLoja, parsearEmail, ehConfirmacao, extrairNumeroPedidoGenerico, DOMINIOS, urlFotoStockX, parseEnvioStockX } from './parsers.js';
+import { identificarLoja, parsearEmail, parsearCancelamento, ehConfirmacao, extrairNumeroPedidoGenerico, DOMINIOS, urlFotoStockX, parseEnvioStockX } from './parsers.js';
 
 const USER = process.env.GMAIL_USER;
 const PASS = process.env.GMAIL_APP_PASSWORD;
@@ -89,6 +89,20 @@ export async function sincronizarGmail() {
 
             const loja = identificarLoja(mail.from?.value?.[0]?.address);
             if (!loja) { resultado.ignorados++; continue; }
+
+            // ── CANCELAMENTO: move um pedido existente para a aba Cancelados ──
+            const canc = parsearCancelamento(loja, { subject: mail.subject, html: mail.html, from: mail.from?.value?.[0]?.address });
+            if (canc) {
+              let n = 0;
+              if (canc.pedido_loja) n = store.marcarCanceladoPorPedidoLoja(loja, canc.pedido_loja);
+              if (n === 0 && canc.nome) n = store.marcarCanceladoPorNome(loja, canc.nome);
+              if (n > 0) {
+                resultado.cancelados = (resultado.cancelados || 0) + n;
+                console.log(`✓ [gmail] cancelamento ${loja} ${canc.pedido_loja ? '#'+canc.pedido_loja : '"'+canc.nome+'"'} → movido para Cancelados`);
+              }
+              resultado.ignorados++;
+              continue;
+            }
 
             // StockX Shipped/Delivered: enriquece pedido existente com a foto real
             if (loja === 'StockX') {
