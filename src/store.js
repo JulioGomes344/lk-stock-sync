@@ -389,3 +389,8 @@ export function marcarCanceladoPorNome(loja, nome) {
   marcarCancelado(hit.id);
   return 1;
 }
+
+// Salva o texto livre de redirecionamento da compra (quem recebe).
+export function salvarRedirecionamento(pedido_id, texto) {
+  db.prepare(`UPDATE pedidos SET redirecionar_para = ? WHERE id = ?`).run((texto || '').trim() || null, pedido_id);
+}
