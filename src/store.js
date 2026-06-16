@@ -367,3 +367,25 @@ export function marcarCanceladoPorPedidoLoja(loja, pedido_loja) {
   marcarCancelado(p.id);
   return 1;
 }
+
+// Marca cancelado casando pelo NOME do produto (fallback p/ StockX, que não
+// envia nº de pedido no cancelamento). Casa só pedidos ativos (não entregue/cancelado).
+export function marcarCanceladoPorNome(loja, nome) {
+  if (!nome) return 0;
+  // normaliza: minúsculas, sem pontuação extra, pra casar variações leves
+  const norm = (x) => (x || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  const alvo = norm(nome);
+  const candidatos = db.prepare(`
+    SELECT p.id, i.nome FROM pedidos p
+    JOIN itens i ON i.pedido_id = p.id
+    WHERE p.loja = ? AND p.status NOT IN ('entregue','cancelado') AND p.excluido_em IS NULL
+  `).all(loja);
+  // casa se o nome do item começa com / contém o nome do cancelamento (ou vice-versa)
+  const hit = candidatos.find(c => {
+    const n = norm(c.nome);
+    return n === alvo || n.includes(alvo) || alvo.includes(n);
+  });
+  if (!hit) return 0;
+  marcarCancelado(hit.id);
+  return 1;
+}
