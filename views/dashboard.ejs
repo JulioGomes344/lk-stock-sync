@@ -33,6 +33,7 @@
     .badge-sem{font-size:8px;letter-spacing:2px;text-transform:uppercase;padding:4px 9px;color:var(--c);background:var(--bg);font-weight:500;white-space:nowrap}
     .badge-auto{font-size:8px;letter-spacing:2px;text-transform:uppercase;padding:4px 9px;background:#fff;color:#0a0a0a;border:1px solid #e8e6e2;font-weight:500;white-space:nowrap}
     .badge-status{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;padding:4px 9px;background:rgba(58,125,68,.10);color:#3a7d44;font-weight:500;white-space:nowrap}
+    .badge-tipo{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;padding:4px 9px;font-weight:500;white-space:nowrap}
     .dot{width:8px;height:8px;border-radius:50%;background:var(--c);display:inline-block;flex-shrink:0}
     input,select{font-family:'DM Sans';font-size:16px;border:1px solid #e8e6e2;padding:12px;background:#fff;width:100%;border-radius:0;transition:border-color .2s}
     @media (min-width:768px){ input,select{font-size:13px;padding:10px 12px} }
@@ -260,6 +261,8 @@
                 <span class="badge-sem sem-<%= p.semaforo.cor %>"><%= p.semaforo.label %><% if (p.semaforo.dias != null) { %> · <%= p.semaforo.dias %>d<% } %></span>
               <% } %>
               <% if (p.origem==='email') { %><span class="badge-auto">Auto · Gmail</span><% } %>
+              <% if (p.tipo_origem === 'estoque') { %><span class="badge-tipo" style="background:rgba(58,125,68,.10);color:#3a7d44">Estoque</span><% } %>
+              <% if (p.tipo_origem === 'encomenda') { %><span class="badge-tipo" style="background:rgba(146,98,10,.12);color:#92620a">Encomenda</span><% } %>
               <% if (p.compra_confirmada_em) { %><span class="badge-status">✓ Compra confirmada</span><% } %>
               <% if (p.aviso_atraso_em) { %><span class="badge-status">✓ Atraso avisado</span><% } %>
               <% if (p.prioridade_enviada_em) { %><span class="badge-status">✓ Prioridade enviada</span><% } %>
@@ -352,15 +355,33 @@
 
           <!-- REDIRECIONAMENTO DA COMPRA (texto livre, salvo no pedido) -->
           <% if (aba!=='lixeira') { %>
-          <form method="POST" action="/pedidos/<%= p.id %>/redirecionar" class="mb-5">
-            <label>Redirecionar compra para</label>
-            <div class="flex flex-col md:flex-row gap-2 md:items-center">
-              <input type="text" name="redirecionar_para" value="<%= p.redirecionar_para || '' %>"
-                     placeholder="Nome de quem vai receber / redirecionar"
-                     class="flex-1" style="max-width:420px">
-              <button class="btn btn-out w-full md:w-auto">Salvar</button>
-            </div>
-          </form>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+            <form method="POST" action="/pedidos/<%= p.id %>/redirecionar">
+              <label>Redirecionar compra para</label>
+              <div class="flex flex-col md:flex-row gap-2 md:items-center">
+                <input type="text" name="redirecionar_para" value="<%= p.redirecionar_para || '' %>"
+                       placeholder="Nome de quem vai receber / redirecionar"
+                       class="flex-1">
+                <button class="btn btn-out w-full md:w-auto">Salvar</button>
+              </div>
+            </form>
+
+            <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem">
+              <label>Origem do produto</label>
+              <div class="flex items-center gap-3">
+                <button class="btn btn-out w-full md:w-auto">
+                  <% if (p.tipo_origem === 'estoque') { %>Estoque ↻
+                  <% } else if (p.tipo_origem === 'encomenda') { %>Encomenda ↻
+                  <% } else { %>Definir origem<% } %>
+                </button>
+                <span class="text-medgray text-[10px] font-light">
+                  <% if (p.tipo_origem === 'estoque') { %>Clique para mudar p/ Encomenda
+                  <% } else if (p.tipo_origem === 'encomenda') { %>Clique para limpar
+                  <% } else { %>Estoque / Encomenda<% } %>
+                </span>
+              </div>
+            </form>
+          </div>
           <% } %>
           <% if (p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') { %>
             <!-- NOTIFICAÇÕES DESTE PEDIDO -->
