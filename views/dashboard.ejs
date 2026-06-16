@@ -243,7 +243,7 @@
       <div class="bg-white p-4 md:p-6 card-sem sem-<%= p.semaforo.cor %>" x-data="{ open:false }"
            data-q="<%= q %>" data-sem="<%= p.semaforo.cor %>"
            x-show="(busca.trim()==='' || $el.dataset.q.includes(busca.trim().toLowerCase())) && (filtroSem==='' || $el.dataset.sem===filtroSem)">
-        <div class="flex items-start gap-3 md:gap-4">
+        <div class="flex items-start gap-3 md:gap-4 cursor-pointer" @click="open=!open">
 
           <!-- MINIATURA DO PRODUTO -->
           <% if (fotoCapa) { %>
@@ -281,13 +281,13 @@
             </div>
 
             <div class="flex items-center gap-5 mt-2">
-              <button @click="open=!open" class="acao-link" style="color:#0a0a0a" x-text="open ? 'Fechar' : 'Detalhes'"></button>
+              <span class="acao-link" style="color:#0a0a0a" x-text="open ? 'Fechar' : 'Detalhes'"></span>
               <% if (aba !== 'lixeira' && aba !== 'cancelados') { %>
-                <form method="POST" action="/pedidos/<%= p.id %>/cancelar"
+                <form method="POST" action="/pedidos/<%= p.id %>/cancelar" @click.stop
                       onsubmit="return confirm('Marcar o pedido #<%= p.numero_pedido %> como CANCELADO?')">
                   <button class="acao-link" style="color:#92620a">Cancelar</button>
                 </form>
-                <form method="POST" action="/pedidos/<%= p.id %>/excluir"
+                <form method="POST" action="/pedidos/<%= p.id %>/excluir" @click.stop
                       onsubmit="return confirm('Mover o pedido #<%= p.numero_pedido %> para a lixeira?')">
                   <button class="acao-link" style="color:#c4463a">Excluir</button>
                 </form>
@@ -298,7 +298,7 @@
 
         <% if (aba === 'cancelados') { %>
           <!-- AÇÕES DA ABA CANCELADOS -->
-          <div class="mt-4 pt-4 border-t border-lightgray flex flex-col md:flex-row md:items-center gap-3">
+          <div class="mt-4 pt-4 border-t border-lightgray flex flex-col md:flex-row md:items-center gap-3" @click.stop>
             <span class="text-medgray text-[10px] font-light">Cancelado em <%= (p.cancelado_em || '').slice(0,16) %></span>
             <div class="flex flex-wrap items-center gap-2 md:ml-auto">
               <form method="POST" action="/pedidos/<%= p.id %>/recompra"
@@ -315,7 +315,7 @@
 
         <% if (aba === 'lixeira') { %>
           <!-- AÇÕES DA LIXEIRA -->
-          <div class="mt-4 pt-4 border-t border-lightgray flex flex-col md:flex-row md:items-center gap-3" x-data="{ confirmar:false }">
+          <div class="mt-4 pt-4 border-t border-lightgray flex flex-col md:flex-row md:items-center gap-3" x-data="{ confirmar:false }" @click.stop>
             <span class="text-medgray text-[10px] font-light">Na lixeira desde <%= (p.excluido_em || '').slice(0,16) %></span>
             <div class="flex flex-wrap items-center gap-2 md:ml-auto">
               <form method="POST" action="/pedidos/<%= p.id %>/restaurar">
@@ -336,7 +336,7 @@
         <% } %>
 
         <!-- PAINEL EXPANDIDO -->
-        <div x-show="open" x-cloak class="mt-5 pt-5 border-t border-lightgray">
+        <div x-show="open" x-cloak @click.stop class="mt-5 pt-5 border-t border-lightgray">
           <!-- DADOS DO PEDIDO -->
           <div class="grid grid-cols-2 md:flex md:flex-wrap gap-x-6 md:gap-x-8 gap-y-3 mb-5">
             <div><div class="kicker">Nº do Pedido</div><div class="text-sm font-light mt-1">#<%= p.numero_pedido %></div></div>
@@ -344,25 +344,41 @@
             <% if (p.pedido_loja) { %><div><div class="kicker">Nº na Loja</div><div class="text-sm font-light mt-1">#<%= p.pedido_loja %></div></div><% } %>
             <div><div class="kicker">Data da Compra</div><div class="text-sm font-light mt-1"><%= p.data_compra || '—' %></div></div>
             <% if (p.valor) { %><div><div class="kicker">Valor</div><div class="text-sm font-light mt-1"><%= p.moeda %> <%= p.valor.toFixed(2) %></div></div><% } %>
+            <% if (p.redirecionar_para) { %><div><div class="kicker">Redirecionar para</div><div class="text-sm font-light mt-1"><%= p.redirecionar_para %></div></div><% } %>
           </div>
+
+          <!-- REDIRECIONAMENTO DA COMPRA (texto livre, salvo no pedido) -->
+          <% if (aba!=='lixeira') { %>
+          <form method="POST" action="/pedidos/<%= p.id %>/redirecionar" class="mb-5">
+            <label>Redirecionar compra para</label>
+            <div class="flex flex-col md:flex-row gap-2 md:items-center">
+              <input type="text" name="redirecionar_para" value="<%= p.redirecionar_para || '' %>"
+                     placeholder="Nome de quem vai receber / redirecionar"
+                     class="flex-1" style="max-width:420px">
+              <button class="btn btn-out w-full md:w-auto">Salvar</button>
+            </div>
+          </form>
+          <% } %>
           <% if (p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') { %>
             <!-- NOTIFICAÇÕES DESTE PEDIDO -->
-            <div class="mb-5" x-data="{ destino: '<%= destinatariosPadrao %>' }">
+            <div class="mb-5" x-data="{ emails: (() => { const arr = '<%= destinatariosPadrao %>'.split(',').map(e=>e.trim()).filter(Boolean); while(arr.length<4) arr.push(''); return arr.slice(0,4); })() }">
               <div class="kicker mb-2">Notificar por e-mail</div>
 
-              <!-- Confirmação de compra com destinatário escolhível -->
+              <!-- Confirmação de compra: 4 blocos de destinatário -->
               <form method="POST" action="/pedidos/<%= p.id %>/confirmar-compra" class="mb-2"
+                    @submit="$refs.destino.value = emails.map(e=>e.trim()).filter(Boolean).join(', ')"
                     onsubmit="return confirm('Enviar e-mail de CONFIRMAÇÃO DE COMPRA do pedido #<%= p.numero_pedido %>?')">
-                <div class="flex flex-col md:flex-row gap-2 md:items-center">
-                  <input type="text" name="destinatario" x-model="destino"
-                         placeholder="destinatário(s) separados por vírgula"
-                         class="flex-1" style="max-width:380px">
-                  <button class="btn btn-out w-full md:w-auto" style="border-color:#3a7d44;color:#3a7d44">Confirmar Compra</button>
+                <input type="hidden" name="destinatario" x-ref="destino">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2" style="max-width:560px">
+                  <template x-for="(e,idx) in emails" :key="idx">
+                    <input type="email" x-model="emails[idx]" :placeholder="'E-mail ' + (idx+1)" class="!bg-white">
+                  </template>
                 </div>
-                <p class="text-medgray text-[10px] mt-1 font-light">Pré-preenchido com os e-mails padrão; edite para enviar a outro destinatário.</p>
+                <button class="btn btn-out w-full md:w-auto" style="border-color:#3a7d44;color:#3a7d44">Confirmar Compra</button>
+                <p class="text-medgray text-[10px] mt-1 font-light">Pré-preenchidos com os e-mails padrão; edite os blocos para enviar a outros destinatários.</p>
               </form>
 
-              <div class="flex flex-col md:flex-row gap-2">
+              <div class="flex flex-col md:flex-row gap-2 mt-3">
                 <form method="POST" action="/pedidos/<%= p.id %>/avisar"
                       onsubmit="return confirm('Enviar e-mail de AVISO DE ATRASO do pedido #<%= p.numero_pedido %>?')">
                   <input type="hidden" name="tipo" value="atraso">
@@ -383,13 +399,28 @@
               <div class="flex items-center gap-3 border border-lightgray p-3">
                 <% if (it.foto_url) { %>
                   <img src="<%= it.foto_url %>" class="w-16 h-16 object-contain flex-shrink-0 p-1" style="background:#fff;border:1px solid #e8e6e2" loading="lazy">
+                <% } else if (p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') { %>
+                  <!-- DROPZONE: clique ou arraste a imagem -->
+                  <form method="POST" action="/itens/<%= it.id %>/foto" enctype="multipart/form-data" class="flex-shrink-0"
+                        x-data="{ over:false }" x-ref="form">
+                    <input type="file" name="foto" accept="image/*" id="foto_<%= it.id %>" x-ref="inp"
+                           class="hidden" onchange="this.form.submit()">
+                    <label for="foto_<%= it.id %>"
+                           @dragover.prevent="over=true" @dragleave.prevent="over=false"
+                           @drop.prevent="over=false; if($event.dataTransfer.files.length){ $refs.inp.files=$event.dataTransfer.files; $refs.form.submit() }"
+                           class="w-16 h-16 flex items-center justify-center cursor-pointer transition"
+                           :class="over ? 'bg-offwhite' : ''"
+                           style="border:1px dashed #b5b0a8">
+                      <span class="text-2xl font-light leading-none" :class="over ? 'text-black' : 'text-warmgray'">+</span>
+                    </label>
+                  </form>
                 <% } else { %>
                   <div class="w-16 h-16 flex-shrink-0 flex items-center justify-center text-warmgray text-[8px] tracking-wider uppercase" style="background:#f5f4f2">Sem foto</div>
                 <% } %>
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-light truncate"><%= it.nome %></div>
                   <div class="text-medgray text-xs"><%= it.tamanho || '—' %> · qtd <%= it.qtd %></div>
-                  <% if (p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') { %>
+                  <% if (it.foto_url && p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') { %>
                     <form method="POST" action="/itens/<%= it.id %>/foto" enctype="multipart/form-data" class="mt-2">
                       <input type="file" name="foto" accept="image/*" class="text-[11px]" style="border:none;padding:0" onchange="this.form.submit()">
                     </form>
