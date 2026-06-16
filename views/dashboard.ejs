@@ -279,6 +279,9 @@
               <% if (p.qtd_fotos>0) { %> · <%= p.qtd_fotos %> foto(s)<% } %>
               <% if (p.lote) { %> · Lote: <%= p.lote.descricao || p.lote.id %><% } %>
             </div>
+            <% if (p.redirecionar_para) { %>
+              <div class="text-xs mt-1 font-light" style="color:#3a7d44">→ Redirecionar para: <%= p.redirecionar_para %></div>
+            <% } %>
 
             <div class="flex items-center gap-5 mt-2">
               <span class="acao-link" style="color:#0a0a0a" x-text="open ? 'Fechar' : 'Detalhes'"></span>
@@ -397,10 +400,9 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-5">
             <% p.itens.forEach(it => { %>
               <div class="flex items-center gap-3 border border-lightgray p-3">
-                <% if (it.foto_url) { %>
-                  <img src="<%= it.foto_url %>" class="w-16 h-16 object-contain flex-shrink-0 p-1" style="background:#fff;border:1px solid #e8e6e2" loading="lazy">
-                <% } else if (p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') { %>
-                  <!-- DROPZONE: clique ou arraste a imagem -->
+                <% const editavel = (p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') %>
+                <% if (editavel) { %>
+                  <!-- DROPZONE: clique ou arraste a imagem (troca/adiciona foto) -->
                   <form method="POST" action="/itens/<%= it.id %>/foto" enctype="multipart/form-data" class="flex-shrink-0"
                         x-data="{ over:false }" x-ref="form">
                     <input type="file" name="foto" accept="image/*" id="foto_<%= it.id %>" x-ref="inp"
@@ -408,23 +410,26 @@
                     <label for="foto_<%= it.id %>"
                            @dragover.prevent="over=true" @dragleave.prevent="over=false"
                            @drop.prevent="over=false; if($event.dataTransfer.files.length){ $refs.inp.files=$event.dataTransfer.files; $refs.form.submit() }"
-                           class="w-16 h-16 flex items-center justify-center cursor-pointer transition"
+                           class="relative w-16 h-16 flex items-center justify-center cursor-pointer transition group"
                            :class="over ? 'bg-offwhite' : ''"
-                           style="border:1px dashed #b5b0a8">
-                      <span class="text-2xl font-light leading-none" :class="over ? 'text-black' : 'text-warmgray'">+</span>
+                           style="border:1px dashed #b5b0a8;background:#fff">
+                      <% if (it.foto_url) { %>
+                        <img src="<%= it.foto_url %>" class="w-full h-full object-contain p-1" loading="lazy">
+                        <span class="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-2xl font-light opacity-0 group-hover:opacity-100 transition" :class="over ? '!opacity-100' : ''">+</span>
+                      <% } else { %>
+                        <span class="text-2xl font-light leading-none" :class="over ? 'text-black' : 'text-warmgray'">+</span>
+                      <% } %>
                     </label>
                   </form>
+                <% } else if (it.foto_url) { %>
+                  <img src="<%= it.foto_url %>" class="w-16 h-16 object-contain flex-shrink-0 p-1" style="background:#fff;border:1px solid #e8e6e2" loading="lazy">
                 <% } else { %>
                   <div class="w-16 h-16 flex-shrink-0 flex items-center justify-center text-warmgray text-[8px] tracking-wider uppercase" style="background:#f5f4f2">Sem foto</div>
                 <% } %>
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-light truncate"><%= it.nome %></div>
                   <div class="text-medgray text-xs"><%= it.tamanho || '—' %> · qtd <%= it.qtd %></div>
-                  <% if (it.foto_url && p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') { %>
-                    <form method="POST" action="/itens/<%= it.id %>/foto" enctype="multipart/form-data" class="mt-2">
-                      <input type="file" name="foto" accept="image/*" class="text-[11px]" style="border:none;padding:0" onchange="this.form.submit()">
-                    </form>
-                  <% } %>
+                  <% if (editavel) { %><div class="text-medgray text-[10px] mt-1 font-light">Clique ou arraste uma imagem no quadro</div><% } %>
                 </div>
               </div>
             <% }) %>
