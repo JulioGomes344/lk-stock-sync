@@ -152,6 +152,12 @@ app.get('/check-atrasos', async (req, res) => {
   res.render('erro', { msg });
 });
 
+// ── TIPO DE ORIGEM: alterna estoque / encomenda / não definido ──
+app.post('/pedidos/:id/tipo-origem', (req, res) => {
+  store.alternarTipoOrigem(req.params.id);
+  res.redirect(req.get('Referrer') || '/');
+});
+
 // ── REDIRECIONAMENTO DA COMPRA (texto livre, salvo no pedido) ──
 app.post('/pedidos/:id/redirecionar', (req, res) => {
   store.salvarRedirecionamento(req.params.id, req.body.redirecionar_para);
