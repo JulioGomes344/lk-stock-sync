@@ -47,6 +47,7 @@ export function initDb() {
       status        TEXT NOT NULL DEFAULT 'pendente', -- pendente | enviado | entregue | cancelado
       cancelado_em  TEXT,                            -- quando foi marcado como cancelado
       redirecionar_para TEXT,                          -- texto livre: quem recebe/redireciona a compra
+      tipo_origem   TEXT,                              -- 'estoque' | 'encomenda' | NULL (não definido)
       origem        TEXT NOT NULL DEFAULT 'manual',   -- manual | email
       email_id      TEXT,
       lote_id       TEXT,
@@ -93,7 +94,8 @@ function migrar() {
       compra_confirmada_em: 'TEXT',
       prioridade_enviada_em: 'TEXT',
       cancelado_em: 'TEXT',
-      redirecionar_para: 'TEXT'
+      redirecionar_para: 'TEXT',
+      tipo_origem: 'TEXT'
     },
     itens: {
       foto_recebida_em: 'TEXT'
