@@ -199,6 +199,40 @@ export function parseEnvioStockX({ subject, html }) {
 }
 
 // ── PONTO DE ENTRADA ──
+// ── CANCELAMENTOS ──
+// Detecta e-mails de cancelamento REAIS e estruturados. Retorna
+// { pedido_loja, nome } para casar com um pedido existente, ou null.
+// Importante: e-mails do suporte humano (ex: support@goat.com "Re: Cancel Order")
+// NÃO são tratados aqui — são conversas, não confirmações automáticas.
+export function parsearCancelamento(loja, { subject, html, from }) {
+  const addr = (from || '').toLowerCase();
+  const subj = subject || '';
+
+  // GOAT: só o remetente automático info@goat.com (nunca support@)
+  if (loja === 'GOAT') {
+    if (addr.includes('support@goat.com')) return null;       // suporte humano: ignora
+    if (!/has been cancel|order cancel/i.test(subj)) return null;
+    const num = (subj.match(/#(\d{5,})/) || [])[1];
+    if (!num) return null;
+    return { pedido_loja: num, nome: null };
+  }
+
+  // StockX: "Your Recent Order Has Been Canceled: <produto>" — sem nº no corpo,
+  // então casamos pelo NOME do produto (vindo do assunto).
+  if (loja === 'StockX') {
+    if (!/has been cancel/i.test(subj)) return null;
+    const nome = subj.replace(/^.*Cancel(l?)ed:\s*/i, '').trim();
+    return { pedido_loja: null, nome: nome || null };
+  }
+
+  // Shopify (Nude, ALD) e outras: padrão "Order #123 canceled/cancelled"
+  if (/cancel(l?)ed|cancelad/i.test(subj)) {
+    const num = (subj.match(/#(\d{4,})/) || [])[1];
+    if (num) return { pedido_loja: num, nome: null };
+  }
+  return null;
+}
+
 export function parsearEmail(loja, { subject, html, text }) {
   if (!html) return null;
   if (!ehConfirmacao(loja, subject)) return null;
