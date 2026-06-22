@@ -179,6 +179,30 @@ function migrar() {
       }
     }
   }
+  // Cadastra operadores WhatsApp por variável de ambiente, sem precisar acessar o SQLite manualmente.
+  // Formato: AUTHORIZED_OPERATORS="João:5511999999999,Maria:5521999999999"
+  const operadoresEnv = (process.env.AUTHORIZED_OPERATORS || '').trim();
+
+  if (operadoresEnv) {
+    const upsertOperador = db.prepare(`
+      INSERT INTO authorized_operators (name, channel, identifier, role, active, updated_at)
+      VALUES (?, 'whatsapp', ?, 'shipper', 1, datetime('now'))
+      ON CONFLICT(channel, identifier) DO UPDATE SET
+        name = excluded.name,
+        role = excluded.role,
+        active = 1,
+        updated_at = datetime('now')
+    `);
+
+    for (const item of operadoresEnv.split(',')) {
+      const [nome, numero] = item.split(':').map(x => (x || '').trim());
+      const limpo = (numero || '').replace(/\D/g, '');
+
+      if (nome && limpo) {
+        upsertOperador.run(nome, limpo);
+      }
+    }
+  }
 
   // Preenche seq para pedidos antigos que não tinham número sequencial,
   // respeitando a ordem de criação. Roda uma única vez (só onde seq é nulo).
