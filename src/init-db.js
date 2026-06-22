@@ -179,6 +179,7 @@ function migrar() {
       }
     }
   }
+  
   // Cadastra operadores WhatsApp por variável de ambiente, sem precisar acessar o SQLite manualmente.
   // Formato: AUTHORIZED_OPERATORS="João:5511999999999,Maria:5521999999999"
   const operadoresEnv = (process.env.AUTHORIZED_OPERATORS || '').trim();
