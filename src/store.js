@@ -58,7 +58,7 @@ export function semaforo(pedido) {
 
 // ── PEDIDOS ──
 
-export function criarPedido({ loja, data_compra, valor, moeda, origem = 'manual', email_id = null, pedido_loja = null }) {
+export function criarPedido({ loja, data_compra, valor, moeda, origem = 'manual', email_id = null, pedido_loja = null, email_account = null }) {
   const id = nanoid(10);
   registrarLoja(loja); // se for loja nova, guarda para próximas vezes
 
@@ -68,9 +68,9 @@ export function criarPedido({ loja, data_compra, valor, moeda, origem = 'manual'
   const numero_pedido = String(seq).padStart(4, '0'); // 0001, 0002, ...
 
   db.prepare(`
-    INSERT INTO pedidos (id, seq, loja, numero_pedido, pedido_loja, data_compra, valor, moeda, origem, email_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, seq, loja, numero_pedido, pedido_loja, data_compra || null, valor || null, moeda || 'USD', origem, email_id);
+    INSERT INTO pedidos (id, seq, loja, numero_pedido, pedido_loja, data_compra, valor, moeda, origem, email_id, email_account)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, seq, loja, numero_pedido, pedido_loja, data_compra || null, valor || null, moeda || 'USD', origem, email_id, email_account);
   return id;
 }
 
@@ -248,9 +248,42 @@ export function excluirDefinitivo(pedido_id) {
 export function emailJaProcessado(message_id) {
   return !!db.prepare('SELECT 1 FROM pedidos WHERE email_id = ?').get(message_id);
 }
+
+export function atualizarPedidoCapturadoPorEmail(message_id, { pedido_loja, itens = [], valor = null, moeda = null, email_account = null } = {}) {
+  const pedido = db.prepare('SELECT * FROM pedidos WHERE email_id = ?').get(message_id);
+  if (!pedido) return 0;
+  let changes = 0;
+
+  if (pedido_loja && !pedido.pedido_loja) {
+    changes += db.prepare('UPDATE pedidos SET pedido_loja = ? WHERE id = ?').run(pedido_loja, pedido.id).changes;
+  }
+  if (valor != null && pedido.valor == null) {
+    changes += db.prepare('UPDATE pedidos SET valor = ?, moeda = COALESCE(?, moeda) WHERE id = ?').run(valor, moeda, pedido.id).changes;
+  }
+  if (email_account && !pedido.email_account) {
+    changes += db.prepare('UPDATE pedidos SET email_account = ? WHERE id = ?').run(email_account, pedido.id).changes;
+  }
+
+  const itensAtuais = db.prepare('SELECT * FROM itens WHERE pedido_id = ?').all(pedido.id);
+  const placeholder = itensAtuais.length === 1 && /Conferir e-mail|itens não extraídos/i.test(itensAtuais[0].nome || '');
+  if (placeholder && itens.length && !/Conferir e-mail|itens não extraídos/i.test(itens[0].nome || '')) {
+    db.prepare('DELETE FROM itens WHERE pedido_id = ?').run(pedido.id);
+    for (const item of itens) {
+      const itemId = adicionarItem(pedido.id, item);
+      if (item.foto_url) anexarFoto(itemId, item.foto_url);
+    }
+    changes += 1;
+  }
+  return changes;
+}
 export function pedidoLojaJaExiste(loja, pedido_loja) {
   if (!pedido_loja) return false;
   return !!db.prepare('SELECT 1 FROM pedidos WHERE loja = ? AND pedido_loja = ?').get(loja, pedido_loja);
+}
+
+export function ordemCompraJaExiste(pedido_loja) {
+  if (!pedido_loja) return false;
+  return !!db.prepare('SELECT 1 FROM pedidos WHERE pedido_loja = ?').get(pedido_loja);
 }
 
 // Anexa foto a todos os itens SEM foto de um pedido identificado pelo nº da loja.
