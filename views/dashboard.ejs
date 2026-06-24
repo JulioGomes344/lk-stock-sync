@@ -157,6 +157,7 @@
                      :required="lojaSel==='__nova__'">
             </div>
             <div><label>Data da Compra</label><input name="data_compra" placeholder="Ex: 09/06/2026 ou hoje"></div>
+            <div><label>Ordem de Compra</label><input name="pedido_loja" placeholder="Ex: 03-EBHH99EL1N ou 377805419"></div>
             <div><label>Valor</label><input type="number" step="0.01" inputmode="decimal" name="valor" placeholder="0.00"></div>
             <div><label>Moeda</label><select name="moeda"><option>USD</option><option>EUR</option><option>BRL</option></select></div>
           </div>
@@ -316,6 +317,7 @@
             <div class="flex items-center gap-2 md:gap-3 flex-wrap">
               <span class="kicker"><%= p.loja %></span>
               <% if (p.numero_pedido) { %><span class="text-medgray text-xs">#<%= p.numero_pedido %></span><% } %>
+              <% if (p.pedido_loja) { %><span class="badge-auto">OC · <%= p.pedido_loja %></span><% } %>
               <% if (p.semaforo.cor !== 'neutro') { %>
                 <span class="badge-sem sem-<%= p.semaforo.cor %>"><%= p.semaforo.label %><% if (p.semaforo.dias != null) { %> · <%= p.semaforo.dias %>d<% } %></span>
               <% } %>
@@ -406,8 +408,9 @@
           <div class="grid grid-cols-2 md:flex md:flex-wrap gap-x-6 md:gap-x-8 gap-y-3 mb-5">
             <div><div class="kicker">Nº do Pedido</div><div class="text-sm font-light mt-1">#<%= p.numero_pedido %></div></div>
             <div><div class="kicker">Loja</div><div class="text-sm font-light mt-1"><%= p.loja %></div></div>
-            <% if (p.pedido_loja) { %><div><div class="kicker">Nº na Loja</div><div class="text-sm font-light mt-1">#<%= p.pedido_loja %></div></div><% } %>
+            <% if (p.pedido_loja) { %><div><div class="kicker">Ordem de Compra</div><div class="text-sm font-light mt-1"><%= p.pedido_loja %></div></div><% } %>
             <div><div class="kicker">Data da Compra</div><div class="text-sm font-light mt-1"><%= p.data_compra || '—' %></div></div>
+            <% if (p.email_account) { %><div><div class="kicker">Caixa Gmail</div><div class="text-sm font-light mt-1"><%= p.email_account %></div></div><% } %>
             <% if (p.valor) { %><div><div class="kicker">Valor</div><div class="text-sm font-light mt-1"><%= p.moeda %> <%= p.valor.toFixed(2) %></div></div><% } %>
             <% if (p.redirecionar_para) { %><div><div class="kicker">Redirecionar para</div><div class="text-sm font-light mt-1"><%= p.redirecionar_para %></div></div><% } %>
           </div>
