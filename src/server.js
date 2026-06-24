@@ -170,10 +170,10 @@ app.get('/', (req, res) => {
 // upload.any() aceita os campos de foto indexados (item_foto_0, item_foto_1...)
 // junto com os campos de texto do formulário
 app.post('/pedidos', upload.any(), (req, res) => {
-  const { loja, loja_nova, data_compra, valor, moeda } = req.body;
+  const { loja, loja_nova, data_compra, valor, moeda, pedido_loja } = req.body;
   // Se o usuário escolheu "Outra" e digitou um nome, usa esse nome
   const lojaFinal = (loja === '__nova__' && loja_nova?.trim()) ? loja_nova.trim() : loja;
-  const pid = store.criarPedido({ loja: lojaFinal, data_compra, valor: valor ? parseFloat(valor) : null, moeda });
+  const pid = store.criarPedido({ loja: lojaFinal, data_compra, valor: valor ? parseFloat(valor) : null, moeda, pedido_loja: pedido_loja?.trim() || null });
 
   // itens vêm como arrays paralelos do form; fotos casam pelo índice no fieldname
   const nomes = [].concat(req.body.item_nome || []);
@@ -240,7 +240,7 @@ app.get('/sync-gmail', async (req, res) => {
   const r = await sincronizarGmail();
   res.render('erro', {
     msg: r.ok
-      ? `Sincronização concluída: ${r.criados} pedido(s) novo(s), ${r.ignorados} ignorado(s) (já processados ou não-confirmação), ${r.processados} e-mail(s) lidos.`
+      ? `Sincronização concluída: ${r.criados} pedido(s) novo(s), ${r.atualizados || 0} pedido(s) corrigido(s), ${r.ignorados} ignorado(s) (já processados ou não-confirmação), ${r.processados} e-mail(s) lidos em ${r.contas || 1} caixa(s).`
       : `Sincronização indisponível: ${r.motivo}`
   });
 });
