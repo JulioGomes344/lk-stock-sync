@@ -50,6 +50,7 @@ export function initDb() {
       tipo_origem   TEXT,                              -- 'estoque' | 'encomenda' | NULL (não definido)
       origem        TEXT NOT NULL DEFAULT 'manual',   -- manual | email
       email_id      TEXT,
+      email_account TEXT,                              -- caixa Gmail que originou a captura
       lote_id       TEXT,
       tracking_code TEXT,                              -- rastreio informado pelo operador/WhatsApp
       observacoes   TEXT,                              -- observações operacionais do operador/WhatsApp
@@ -159,7 +160,8 @@ function migrar() {
       redirecionar_para: 'TEXT',
       tipo_origem: 'TEXT',
       tracking_code: 'TEXT',
-      observacoes: 'TEXT'
+      observacoes: 'TEXT',
+      email_account: 'TEXT'
     },
     itens: {
       foto_recebida_em: 'TEXT'
