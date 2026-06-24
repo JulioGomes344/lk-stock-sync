@@ -9,6 +9,12 @@ const decode = (s) => (s || '')
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/\u00a0/g, ' ')
   .trim();
 
+const textoLimpo = (html = '', text = '') => decode(`${text || ''}\n${html || ''}`
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(/<\/p>|<\/div>|<\/tr>|<\/td>|<\/h[1-6]>/gi, '\n')
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/\s+/g, ' '));
+
 // ── Domínios conhecidos → loja ──
 // Matching por DOMÍNIO (não endereço exato): qualquer remetente @stockx.com
 // é StockX, mesmo que a loja troque o prefixo (noreply@, orders@, no-reply@...).
@@ -50,10 +56,11 @@ export function ehConfirmacao(loja, subject) {
 
 // ── Extração genérica do nº do pedido (para o fallback de garantia) ──
 export function extrairNumeroPedidoGenerico(subject, html) {
-  const m1 = (subject || '').match(/#(\d{4,})/);
+  const m1 = (subject || '').match(/#\s*([0-9A-Z][0-9A-Z-]{4,})/i);
   if (m1) return m1[1];
-  const txt = (html || '').replace(/<[^>]+>/g, '|');
-  const m2 = txt.match(/Order number:\s*\|?\s*([0-9A-Z][0-9A-Z-]{6,})/i) || txt.match(/[Oo]rder\s*#?(\d{4,})/);
+  const txt = textoLimpo(html);
+  const m2 = txt.match(/(?:order|purchase)\s*(?:number|no\.?|#)\s*[:#]?\s*([0-9A-Z][0-9A-Z-]{4,})/i)
+    || txt.match(/\b(?:order|purchase)\s*#\s*([0-9A-Z][0-9A-Z-]{4,})/i);
   return m2 ? m2[1] : null;
 }
 
@@ -117,16 +124,19 @@ function parseALD({ subject, html }) {
 // ── STOCKX ──
 // Nº do pedido: "Order number: 03-EBHH99EL1N" | nome no subject | tamanho "US M 6" no corpo
 // StockX NÃO envia imagem do produto (só ícones) → foto_url fica null.
-function parseStockX({ subject, html }) {
-  const txt = html.replace(/<[^>]+>/g, '|').replace(/\|+/g, '|').replace(/\s+/g, ' ');
+function parseStockX({ subject, html, text }) {
+  const txt = textoLimpo(html, text);
 
-  const pedido = (txt.match(/Order number:\s*\|?\s*([0-9A-Z][0-9A-Z-]{6,})/i) || [])[1];
+  const pedido = extrairNumeroPedidoGenerico(subject, `${text || ''}\n${html || ''}`);
 
   // nome: do subject "👍 Order Confirmed: Onitsuka Tiger Mexico 66 SD Birch Peacoat Green"
-  let nome = (subject || '').replace(/^[^:]*Order Confirmed:\s*/i, '').trim();
-  // fallback: do corpo, o trecho antes do style-id
+  let nome = (subject || '')
+    .replace(/^[^A-Z0-9]*(?:Your\s+)?Order\s+(?:Has\s+Been\s+)?Confirmed\s*:?\s*/i, '')
+    .replace(/^.*?Order Confirmed:\s*/i, '')
+    .trim();
+  // fallback: do corpo, antes de Size/US/Style ID/Order number
   if (!nome) {
-    const m = txt.match(/\|([A-Z][^|]{8,80})\|\s*\|?[A-Z0-9]{4,}-[0-9]{2,}\|/);
+    const m = txt.match(/([A-Z][A-Za-z0-9 '&()./+-]{8,120})\s+(?:Size|US\s*[MW]?\s*[\d.]+|Style ID|Order number)/i);
     nome = m ? m[1].trim() : 'Pedido StockX';
   }
 
@@ -134,7 +144,9 @@ function parseStockX({ subject, html }) {
   const tamanho = (txt.match(/\b(US\s*[MW]?\s*[\d.]+)\b/) || [])[1] || null;
 
   // total: "Total Payment ... $377.86"
-  const tm = txt.match(/Total Payment[^$]*\$\s*([\d.,]+)/i) || txt.match(/Purchase Price:[^$]*\$\s*([\d.,]+)/i);
+  const tm = txt.match(/Total Payment[^$]*\$\s*([\d.,]+)/i)
+    || txt.match(/Purchase Price[^$]*\$\s*([\d.,]+)/i)
+    || txt.match(/Total[^$]{0,60}\$\s*([\d.,]+)/i);
   const valor = tm ? parseFloat(tm[1].replace(/,/g, '')) : null;
 
   if (!pedido) return null;
@@ -191,8 +203,7 @@ export function urlFotoStockX(nome) {
 export function parseEnvioStockX({ subject, html }) {
   const s = (subject || '').toLowerCase();
   if (!s.includes('shipped') && !s.includes('delivered')) return null;
-  const txt = html.replace(/<[^>]+>/g, '|').replace(/\|+/g, '|').replace(/\s+/g, ' ');
-  const pedido = (txt.match(/Order number:\s*\|?\s*([0-9A-Z][0-9A-Z-]{6,})/i) || [])[1];
+  const pedido = extrairNumeroPedidoGenerico(subject, html);
   const m = html.match(/<img[^>]+src="(https:\/\/images\.stockx\.com\/images\/[^"]+)"/);
   if (!pedido || !m) return null;
   return { pedido_loja: pedido, foto_url: m[1] };
@@ -237,7 +248,7 @@ export function parsearEmail(loja, { subject, html, text }) {
   if (!html) return null;
   if (!ehConfirmacao(loja, subject)) return null;
   try {
-    if (loja === 'StockX') return parseStockX({ subject, html });
+    if (loja === 'StockX') return parseStockX({ subject, html, text });
     if (loja === 'GOAT') return parseGOAT({ subject, html });
     if (loja === 'Aimé Leon Dore') return parseALD({ subject, html });
     // demais Shopify (Nude Project; Alo/Rhode tendem a seguir o padrão — validar com amostras)
