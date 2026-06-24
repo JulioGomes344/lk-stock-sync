@@ -50,11 +50,16 @@ app.use('/uploads', express.static(UPLOAD_DIR));
 
 // ── WEBHOOK OPERADOR WHATSAPP (antes do login; protegido por token + grupo + allowlist) ──
 function tokenWebhookValido(req) {
-  const token = process.env.OPERATOR_WEBHOOK_TOKEN;
-  if (!token) return false;
-  return req.headers.authorization === `Bearer ${token}`
-      || req.headers.apikey === token
-      || req.query.token === token;
+  const tokens = [
+    process.env.OPERATOR_WEBHOOK_TOKEN,
+    process.env.LK_STOCK_HERMES_ROUTE_SECRET
+  ].filter(Boolean);
+  if (!tokens.length) return false;
+  return tokens.some(token =>
+    req.headers.authorization === `Bearer ${token}`
+    || req.headers.apikey === token
+    || req.query.token === token
+  );
 }
 
 function normalizarPayloadEvolution(payload) {
