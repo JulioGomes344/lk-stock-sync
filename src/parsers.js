@@ -147,10 +147,11 @@ function parseStockX({ subject, html, text }) {
   // SKU/Style ID: StockX mostra o style code em um chip antes do tamanho
   // (ex.: "HV8547-601 US W 7"), e em alguns e-mails também rotula como
   // "Style ID"/"SKU". Evita capturar o nº do pedido, que costuma ter vários hífens.
-  const sku = ((txt.match(/\b(?:Style\s*ID|Style|SKU)\s*[:#]?\s*([A-Z0-9]{2,}[- ][A-Z0-9-]{2,})\b/i) || [])[1]
+  const skuRaw = ((txt.match(/\b(?:Style\s*ID|Style|SKU)\s*[:#]?\s*([A-Z0-9]{2,}[- ][A-Z0-9-]{2,})\b/i) || [])[1]
     || (txt.match(/\b([A-Z]{1,4}\d{3,6}-\d{3})\b(?=\s+US\s*[MW]?\s*[\d.]+)/i) || [])[1]
     || (txt.match(/\b([A-Z]{1,4}\d{3,6}-\d{3})\b/) || [])[1]
     || null);
+  const sku = skuRaw ? skuRaw.replace(/\s+SIZE\b.*$/i, '').trim() : null;
 
   // total: "Total Payment ... $377.86"
   const tm = txt.match(/Total Payment[^$]*\$\s*([\d.,]+)/i)
