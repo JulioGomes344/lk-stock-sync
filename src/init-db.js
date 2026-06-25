@@ -136,6 +136,7 @@ export function initDb() {
   `);
 
   migrar();
+  limparSkusComTamanho();
   console.log('✓ Schema criado / verificado');
 }
 
@@ -220,6 +221,30 @@ function migrar() {
     tx();
     console.log(`  ↳ migração: ${semSeq.length} pedido(s) antigo(s) numerado(s) sequencialmente`);
   }
+}
+
+function sanitizarSku(sku) {
+  const limpo = String(sku || '')
+    .replace(/\bSIZE\b.*$/i, '')
+    .replace(/\b(?:US\s*)?(?:M|W|MEN'?S|MENS|WOMEN'?S|WOMENS|UNISEX)\s*\d+(?:\.5)?\b.*$/i, '')
+    .trim();
+  return limpo || null;
+}
+
+function limparSkusComTamanho() {
+  const rows = db.prepare(`SELECT id, sku FROM itens WHERE sku IS NOT NULL AND sku != ''`).all();
+  const upd = db.prepare(`UPDATE itens SET sku = ? WHERE id = ?`);
+  let changes = 0;
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      const limpo = sanitizarSku(row.sku);
+      if (limpo && limpo !== row.sku) {
+        changes += upd.run(limpo, row.id).changes;
+      }
+    }
+  });
+  tx();
+  if (changes) console.log(`  ↳ migração: ${changes} SKU(s) limpos sem SIZE/tamanho`);
 }
 
 // Permite rodar direto: `node src/init-db.js` ou `npm run init-db`
