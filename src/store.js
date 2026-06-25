@@ -488,6 +488,72 @@ function normalizarReferenciaProduto(ref) {
     .replace(/[^A-Z0-9]/g, '');
 }
 
+function itemPrincipalDoPedido(pedido_id) {
+  if (!pedido_id) return null;
+  return db.prepare(`
+    SELECT sku, tamanho FROM itens
+    WHERE pedido_id = ?
+    ORDER BY CASE WHEN sku IS NOT NULL AND sku != '' THEN 0 ELSE 1 END, rowid ASC
+    LIMIT 1
+  `).get(pedido_id) || null;
+}
+
+function skuPrincipalDoPedido(pedido_id) {
+  return itemPrincipalDoPedido(pedido_id)?.sku || null;
+}
+
+function referenciaProdutoOperador(pedido) {
+  const sku = skuPrincipalDoPedido(pedido?.id);
+  return sku ? `SKU ${sku}` : `SKU não cadastrada (#${pedido?.numero_pedido || '?'})`;
+}
+
+function dataOperadorHoje() {
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+}
+
+function formatarNumeroTamanho(n) {
+  if (!Number.isFinite(n)) return '—';
+  return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10).replace('.', '.');
+}
+
+function tamanhosUsDoItem(item) {
+  const raw = String(item?.tamanho || '').trim();
+  const m = raw.match(/(?:US\s*)?(?:M|MEN'?S|MENS|UNISEX)?\s*(\d+(?:\.5)?)/i);
+  const w = raw.match(/(?:US\s*)?(?:W|WOMEN'?S|WOMENS)\s*(\d+(?:\.5)?)/i);
+  const any = raw.match(/\b(\d+(?:\.5)?)\b/);
+
+  if (w) {
+    const womens = parseFloat(w[1]);
+    return { mens: formatarNumeroTamanho(womens - 1.5), womens: formatarNumeroTamanho(womens) };
+  }
+  if (m || any) {
+    const mens = parseFloat((m || any)[1]);
+    return { mens: formatarNumeroTamanho(mens), womens: formatarNumeroTamanho(mens + 1.5) };
+  }
+  return { mens: '—', womens: raw || '—' };
+}
+
+function linhasProdutoOperador(pedido) {
+  const item = itemPrincipalDoPedido(pedido?.id);
+  const sku = item?.sku || `SKU NÃO CADASTRADA (#${pedido?.numero_pedido || '?'})`;
+  const tamanhos = tamanhosUsDoItem(item);
+  return [
+    sku,
+    `US MENS/UNISEX ${tamanhos.mens}`,
+    `US WOMENS ${tamanhos.womens}`
+  ].join('\n');
+}
+
+function respostaRecebidoOperador(pedido) {
+  return `RECEBIDO ${dataOperadorHoje()}\n${linhasProdutoOperador(pedido)}`;
+}
+
+function respostaEnviadoOperador(pedidos, loteNome = null) {
+  const lista = pedidos.map((pedido, idx) => `${idx + 1}. ${linhasProdutoOperador(pedido)}`).join('\n\n');
+  const loteLinha = loteNome ? `\n${String(loteNome).trim().toUpperCase()}` : '';
+  return `ENVIADO ${dataOperadorHoje()}${loteLinha}\n\n${lista}`;
+}
+
 export function buscarPedidoPorReferencia(ref) {
   const limpo = String(ref || '').replace(/^#/, '').trim();
   if (!limpo) return null;
@@ -551,19 +617,21 @@ export function aplicarAcaoOperador(parsed, operator, operatorMessageId, rawMess
   if (parsed.intent === 'mark_received') {
     const pedido = buscarPedidoPorReferencia(parsed.orderRef);
     if (!pedido) return { status: 'not_found', reply: `Não encontrei o pedido ${parsed.orderRef}.` };
-    if (pedido.status === 'entregue') return { status: 'blocked', reply: `Pedido #${pedido.numero_pedido} já está entregue.` };
-    if (pedido.status === 'cancelado') return { status: 'blocked', reply: `Pedido #${pedido.numero_pedido} está cancelado.` };
+    const refProduto = referenciaProdutoOperador(pedido);
+    if (pedido.status === 'entregue') return { status: 'blocked', reply: `${refProduto} já está entregue.` };
+    if (pedido.status === 'cancelado') return { status: 'blocked', reply: `${refProduto} está cancelado.` };
 
     db.prepare(`UPDATE pedidos SET status = 'recebido' WHERE id = ?`).run(pedido.id);
     registrarEventoOperador({ orderId: pedido.id, eventType: 'status_changed', oldStatus: pedido.status, newStatus: 'recebido', ...actor });
-    return { status: 'applied', reply: `Atualizado: #${pedido.numero_pedido} → Recebido` };
+    return { status: 'applied', reply: respostaRecebidoOperador(pedido) };
   }
 
   if (parsed.intent === 'mark_shipped') {
     const pedido = buscarPedidoPorReferencia(parsed.orderRef);
     if (!pedido) return { status: 'not_found', reply: `Não encontrei o pedido ${parsed.orderRef}.` };
-    if (pedido.status === 'entregue') return { status: 'blocked', reply: `Pedido #${pedido.numero_pedido} já está entregue.` };
-    if (pedido.status === 'cancelado') return { status: 'blocked', reply: `Pedido #${pedido.numero_pedido} está cancelado.` };
+    const refProduto = referenciaProdutoOperador(pedido);
+    if (pedido.status === 'entregue') return { status: 'blocked', reply: `${refProduto} já está entregue.` };
+    if (pedido.status === 'cancelado') return { status: 'blocked', reply: `${refProduto} está cancelado.` };
 
     const loteId = obterOuCriarLotePorCodigo(parsed.batch);
     db.prepare(`
@@ -575,40 +643,43 @@ export function aplicarAcaoOperador(parsed, operator, operatorMessageId, rawMess
     `).run(loteId, parsed.tracking, pedido.id);
 
     registrarEventoOperador({ orderId: pedido.id, eventType: 'status_changed', oldStatus: pedido.status, newStatus: 'enviado', newValue: parsed.batch || parsed.tracking || null, ...actor });
-    return { status: 'applied', reply: `Atualizado: #${pedido.numero_pedido} → Enviado${parsed.batch ? ` | lote ${parsed.batch.toUpperCase()}` : ''}${parsed.tracking ? ` | tracking ${parsed.tracking}` : ''}` };
+    return { status: 'applied', reply: respostaEnviadoOperador([pedido], parsed.batch) };
   }
 
   if (parsed.intent === 'mark_delivered') {
     const pedido = buscarPedidoPorReferencia(parsed.orderRef);
     if (!pedido) return { status: 'not_found', reply: `Não encontrei o pedido ${parsed.orderRef}.` };
-    if (pedido.status === 'cancelado') return { status: 'blocked', reply: `Pedido #${pedido.numero_pedido} está cancelado.` };
+    const refProduto = referenciaProdutoOperador(pedido);
+    if (pedido.status === 'cancelado') return { status: 'blocked', reply: `${refProduto} está cancelado.` };
 
     db.prepare(`UPDATE pedidos SET status = 'entregue' WHERE id = ?`).run(pedido.id);
     registrarEventoOperador({ orderId: pedido.id, eventType: 'status_changed', oldStatus: pedido.status, newStatus: 'entregue', ...actor });
-    return { status: 'applied', reply: `Atualizado: #${pedido.numero_pedido} → Entregue` };
+    return { status: 'applied', reply: `Atualizado: ${refProduto} → Entregue` };
   }
 
   if (parsed.intent === 'set_tracking') {
     const pedido = buscarPedidoPorReferencia(parsed.orderRef);
     if (!pedido) return { status: 'not_found', reply: `Não encontrei o pedido ${parsed.orderRef}.` };
+    const refProduto = referenciaProdutoOperador(pedido);
     db.prepare(`UPDATE pedidos SET tracking_code = ? WHERE id = ?`).run(parsed.tracking, pedido.id);
     registrarEventoOperador({ orderId: pedido.id, eventType: 'tracking_updated', oldValue: pedido.tracking_code, newValue: parsed.tracking, ...actor });
-    return { status: 'applied', reply: `Tracking atualizado: #${pedido.numero_pedido} → ${parsed.tracking}` };
+    return { status: 'applied', reply: `Tracking atualizado: ${refProduto} → ${parsed.tracking}` };
   }
 
   if (parsed.intent === 'add_note' || parsed.intent === 'report_problem') {
     const pedido = buscarPedidoPorReferencia(parsed.orderRef);
     if (!pedido) return { status: 'not_found', reply: `Não encontrei o pedido ${parsed.orderRef}.` };
+    const refProduto = referenciaProdutoOperador(pedido);
     const prefix = parsed.intent === 'report_problem' ? '[Problema WhatsApp]' : '[Obs WhatsApp]';
     const nova = `${pedido.observacoes || ''}\n${prefix} ${parsed.note}`.trim();
     db.prepare(`UPDATE pedidos SET observacoes = ? WHERE id = ?`).run(nova, pedido.id);
     registrarEventoOperador({ orderId: pedido.id, eventType: parsed.intent === 'report_problem' ? 'problem_reported' : 'note_added', oldValue: pedido.observacoes, newValue: parsed.note, ...actor });
-    return { status: 'applied', reply: `Registrado no pedido #${pedido.numero_pedido}: ${parsed.note}` };
+    return { status: 'applied', reply: `Registrado em ${refProduto}: ${parsed.note}` };
   }
 
   if (parsed.intent === 'assign_batch') {
     const loteId = obterOuCriarLotePorCodigo(parsed.batch);
-    const ok = [];
+    const pedidosEnviados = [];
     const fail = [];
     const tx = db.transaction(() => {
       for (const ref of parsed.orderRefs) {
@@ -616,12 +687,13 @@ export function aplicarAcaoOperador(parsed, operator, operatorMessageId, rawMess
         if (!pedido || ['entregue', 'cancelado'].includes(pedido.status)) { fail.push(ref); continue; }
         db.prepare(`UPDATE pedidos SET lote_id = ?, status = 'enviado' WHERE id = ?`).run(loteId, pedido.id);
         registrarEventoOperador({ orderId: pedido.id, eventType: 'batch_assigned', oldStatus: pedido.status, newStatus: 'enviado', newValue: parsed.batch, ...actor });
-        ok.push(`#${pedido.numero_pedido}`);
+        pedidosEnviados.push(pedido);
       }
     });
     tx();
-    if (!ok.length) return { status: 'not_found', reply: `Nenhum pedido válido encontrado para o lote ${parsed.batch.toUpperCase()}.` };
-    return { status: fail.length ? 'partial' : 'applied', reply: `Lote ${parsed.batch.toUpperCase()}: ${ok.join(', ')}${fail.length ? ` | não encontrados/bloqueados: ${fail.join(', ')}` : ''}` };
+    if (!pedidosEnviados.length) return { status: 'not_found', reply: `Nenhum pedido válido encontrado para o lote ${parsed.batch.toUpperCase()}.` };
+    const reply = respostaEnviadoOperador(pedidosEnviados, parsed.batch);
+    return { status: fail.length ? 'partial' : 'applied', reply: fail.length ? `${reply}\n\nNão encontrados/bloqueados: ${fail.join(', ')}` : reply };
   }
 
   return { status: 'unknown', reply: 'Não entendi. Use: recebido 1050 ou enviado 1050 lote CX12 tracking LB123BR' };
