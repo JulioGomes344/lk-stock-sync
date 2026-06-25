@@ -74,12 +74,20 @@ export function criarPedido({ loja, data_compra, valor, moeda, origem = 'manual'
   return id;
 }
 
+function sanitizarSku(sku) {
+  const limpo = String(sku || '')
+    .replace(/\bSIZE\b.*$/i, '')
+    .replace(/\b(?:US\s*)?(?:M|W|MEN'?S|MENS|WOMEN'?S|WOMENS|UNISEX)\s*\d+(?:\.5)?\b.*$/i, '')
+    .trim();
+  return limpo || null;
+}
+
 export function adicionarItem(pedido_id, { nome, sku = null, tamanho, qtd }) {
   const id = nanoid(10);
   db.prepare(`
     INSERT INTO itens (id, pedido_id, nome, sku, tamanho, qtd)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, pedido_id, nome, sku || null, tamanho || null, qtd || 1);
+  `).run(id, pedido_id, nome, sanitizarSku(sku), tamanho || null, qtd || 1);
   return id;
 }
 
@@ -277,7 +285,7 @@ export function atualizarPedidoCapturadoPorEmail(message_id, { pedido_loja, iten
     const updSku = db.prepare(`UPDATE itens SET sku = ? WHERE id = ? AND (sku IS NULL OR sku = '')`);
     itensAtuais.forEach((atual, idx) => {
       const novo = itens[idx];
-      if (novo?.sku) changes += updSku.run(novo.sku, atual.id).changes;
+      if (novo?.sku) changes += updSku.run(sanitizarSku(novo.sku), atual.id).changes;
     });
   }
   return changes;
