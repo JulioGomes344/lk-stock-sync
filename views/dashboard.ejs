@@ -167,10 +167,11 @@
           <template x-for="(item,i) in itens" :key="i">
             <div class="mb-4 pb-4 border-b border-lightgray md:border-0 md:pb-0 md:mb-3">
               <div class="grid grid-cols-12 gap-2">
-                <input class="col-span-12 md:col-span-7" name="item_nome" placeholder="Nome do produto">
-                <input class="col-span-5 md:col-span-2" name="item_tamanho" placeholder="Tam.">
-                <input class="col-span-4 md:col-span-2" type="number" inputmode="numeric" name="item_qtd" value="1" min="1">
-                <button type="button" class="col-span-3 md:col-span-1 text-redsub text-xl min-h-[44px]" @click="itens.splice(i,1)" x-show="itens.length>1">×</button>
+                <input class="col-span-12 md:col-span-5" name="item_nome" placeholder="Nome do produto">
+                <input class="col-span-5 md:col-span-3" name="item_sku" placeholder="SKU / Style ID">
+                <input class="col-span-4 md:col-span-2" name="item_tamanho" placeholder="Tam.">
+                <input class="col-span-2 md:col-span-1" type="number" inputmode="numeric" name="item_qtd" value="1" min="1">
+                <button type="button" class="col-span-1 md:col-span-1 text-redsub text-xl min-h-[44px]" @click="itens.splice(i,1)" x-show="itens.length>1">×</button>
               </div>
               <div class="mt-2 flex items-center gap-2">
                 <span class="text-[8px] tracking-wider uppercase text-medgray flex-shrink-0">Foto (opcional)</span>
@@ -299,7 +300,7 @@
 
     <div class="space-y-px bg-lightgray border border-lightgray <%= pedidos.length===0 ? 'hidden' : '' %>">
     <% pedidos.forEach(p => { %>
-      <% const q = (p.loja + ' ' + (p.numero_pedido||'') + ' ' + (p.pedido_loja||'') + ' ' + p.itens.map(i=>i.nome).join(' ')).toLowerCase() %>
+      <% const q = (p.loja + ' ' + (p.numero_pedido||'') + ' ' + (p.pedido_loja||'') + ' ' + p.itens.map(i=>[i.nome, i.sku].filter(Boolean).join(' ')).join(' ')).toLowerCase() %>
       <% const fotoCapa = (p.itens.find(i => i.foto_url) || {}).foto_url %>
       <div class="bg-white p-4 md:p-6 card-sem sem-<%= p.semaforo.cor %>" x-data="{ open:false }"
            data-q="<%= q %>" data-sem="<%= p.semaforo.cor %>"
@@ -332,9 +333,9 @@
               <% }) %>
             </div>
             <% const titulo = p.itens.length === 0 ? 'Sem itens'
-                 : p.itens.length === 1 ? p.itens[0].nome + (p.itens[0].tamanho ? ' · ' + p.itens[0].tamanho : '')
-                 : p.itens[0].nome + '  +' + (p.itens.length - 1) + (p.itens.length - 1 === 1 ? ' item' : ' itens') %>
-            <div class="font-display text-lg md:text-xl font-light mt-1 leading-snug truncate" title="<%= p.itens.map(i => i.nome).join(' / ') %>">
+                 : p.itens.length === 1 ? p.itens[0].nome + (p.itens[0].sku ? ' · ' + p.itens[0].sku : '') + (p.itens[0].tamanho ? ' · ' + p.itens[0].tamanho : '')
+                 : p.itens[0].nome + (p.itens[0].sku ? ' · ' + p.itens[0].sku : '') + '  +' + (p.itens.length - 1) + (p.itens.length - 1 === 1 ? ' item' : ' itens') %>
+            <div class="font-display text-lg md:text-xl font-light mt-1 leading-snug truncate" title="<%= p.itens.map(i => [i.nome, i.sku].filter(Boolean).join(' · ')).join(' / ') %>">
               <%= titulo %>
             </div>
             <div class="text-medgray text-xs mt-1 font-light">
@@ -512,7 +513,8 @@
                 <% } %>
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-light truncate"><%= it.nome %></div>
-                  <div class="text-medgray text-xs"><%= it.tamanho || '—' %> · qtd <%= it.qtd %></div>
+                  <% if (it.sku) { %><div class="text-[10px] tracking-wider uppercase mt-1"><span class="badge-auto">SKU · <%= it.sku %></span></div><% } %>
+                  <div class="text-medgray text-xs mt-1"><%= it.tamanho || '—' %> · qtd <%= it.qtd %></div>
                   <% if (editavel) { %><div class="text-medgray text-[10px] mt-1 font-light">Clique ou arraste uma imagem no quadro</div><% } %>
                 </div>
               </div>
