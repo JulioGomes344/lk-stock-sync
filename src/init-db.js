@@ -66,6 +66,7 @@ export function initDb() {
       id               TEXT PRIMARY KEY,
       pedido_id        TEXT NOT NULL,
       nome             TEXT NOT NULL,
+      sku              TEXT,
       tamanho          TEXT,
       qtd              INTEGER NOT NULL DEFAULT 1,
       foto_url         TEXT,
@@ -164,6 +165,7 @@ function migrar() {
       email_account: 'TEXT'
     },
     itens: {
+      sku: 'TEXT',
       foto_recebida_em: 'TEXT'
     },
     lotes: {
