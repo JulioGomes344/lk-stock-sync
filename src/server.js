@@ -182,11 +182,12 @@ app.post('/pedidos', upload.any(), (req, res) => {
 
   // itens vêm como arrays paralelos do form; fotos casam pelo índice no fieldname
   const nomes = [].concat(req.body.item_nome || []);
+  const skus = [].concat(req.body.item_sku || []);
   const tams = [].concat(req.body.item_tamanho || []);
   const qtds = [].concat(req.body.item_qtd || []);
   nomes.forEach((nome, i) => {
     if (!nome?.trim()) return;
-    const itemId = store.adicionarItem(pid, { nome, tamanho: tams[i], qtd: parseInt(qtds[i]) || 1 });
+    const itemId = store.adicionarItem(pid, { nome, sku: skus[i]?.trim() || null, tamanho: tams[i], qtd: parseInt(qtds[i]) || 1 });
     const foto = (req.files || []).find(f => f.fieldname === `item_foto_${i}`);
     if (foto) store.anexarFoto(itemId, '/uploads/' + foto.filename);
   });
