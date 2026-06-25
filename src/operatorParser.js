@@ -14,7 +14,50 @@ function splitOrderRefs(text) {
     .filter(Boolean);
 }
 
+function meaningfulLines(text) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+}
+
+function cleanSkuLine(line) {
+  return String(line || '')
+    .replace(/^\d+\.\s*/, '')
+    .replace(/^SKU\s*[:·-]?\s*/i, '')
+    .replace(/\s+SIZE\b.*$/i, '')
+    .trim();
+}
+
+function looksLikeSku(line) {
+  const sku = cleanSkuLine(line);
+  return /^[A-Z0-9][A-Z0-9._-]{3,}$/i.test(sku) && !/^US\b/i.test(sku);
+}
+
+function parseReceivedBlock(text) {
+  const lines = meaningfulLines(text);
+  if (!/^recebido\b/i.test(lines[0] || '')) return null;
+  const skuLine = lines.slice(1).find(looksLikeSku);
+  if (!skuLine) return null;
+  return { intent: 'mark_received', orderRef: cleanSkuLine(skuLine), confidence: 'high' };
+}
+
+function parseShippedBlock(text) {
+  const lines = meaningfulLines(text);
+  if (!/^enviado\b/i.test(lines[0] || '')) return null;
+  const batch = lines[1] && !/^\d+\./.test(lines[1]) && !/^US\b/i.test(lines[1])
+    ? lines[1]
+    : null;
+  const productLines = batch ? lines.slice(2) : lines.slice(1);
+  const orderRefs = productLines.filter(looksLikeSku).map(cleanSkuLine);
+  if (!batch || !orderRefs.length) return null;
+  return { intent: 'assign_batch', batch, orderRefs, confidence: 'high' };
+}
+
 export function parseOperatorMessage(text) {
+  const block = parseReceivedBlock(text) || parseShippedBlock(text);
+  if (block) return block;
+
   const normalized = normalizeText(text);
   let match;
 
