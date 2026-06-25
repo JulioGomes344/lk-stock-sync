@@ -15,6 +15,14 @@ const textoLimpo = (html = '', text = '') => decode(`${text || ''}\n${html || ''
   .replace(/<[^>]+>/g, ' ')
   .replace(/\s+/g, ' '));
 
+const sanitizarSku = (sku) => {
+  const limpo = String(sku || '')
+    .replace(/\bSIZE\b.*$/i, '')
+    .replace(/\b(?:US\s*)?(?:M|W|MEN'?S|MENS|WOMEN'?S|WOMENS|UNISEX)\s*\d+(?:\.5)?\b.*$/i, '')
+    .trim();
+  return limpo || null;
+};
+
 // ── Domínios conhecidos → loja ──
 // Matching por DOMÍNIO (não endereço exato): qualquer remetente @stockx.com
 // é StockX, mesmo que a loja troque o prefixo (noreply@, orders@, no-reply@...).
@@ -148,10 +156,11 @@ function parseStockX({ subject, html, text }) {
   // (ex.: "HV8547-601 US W 7"), e em alguns e-mails também rotula como
   // "Style ID"/"SKU". Evita capturar o nº do pedido, que costuma ter vários hífens.
   const skuRaw = ((txt.match(/\b(?:Style\s*ID|Style|SKU)\s*[:#]?\s*([A-Z0-9]{2,}[- ][A-Z0-9-]{2,})\b/i) || [])[1]
+    || (txt.match(/\b([A-Z0-9]{5,12})\s+SIZE\b/i) || [])[1]
     || (txt.match(/\b([A-Z]{1,4}\d{3,6}-\d{3})\b(?=\s+US\s*[MW]?\s*[\d.]+)/i) || [])[1]
     || (txt.match(/\b([A-Z]{1,4}\d{3,6}-\d{3})\b/) || [])[1]
     || null);
-  const sku = skuRaw ? skuRaw.replace(/\s+SIZE\b.*$/i, '').trim() : null;
+  const sku = sanitizarSku(skuRaw);
 
   // total: "Total Payment ... $377.86"
   const tm = txt.match(/Total Payment[^$]*\$\s*([\d.,]+)/i)
@@ -188,7 +197,7 @@ function parseGOAT({ subject, html }) {
 
   const tamanho = ((txt.match(/\|\s*(US [^|/]+?)\s*\//) || [])[1] || '').trim() || null;
   // GOAT costuma trazer a informação de forma explícita como "SKU: XXXXX" no bloco do item.
-  const sku = ((txt.match(/\bSKU\s*:?\s*([A-Z0-9][A-Z0-9._-]{2,})\b/i) || [])[1] || '').trim() || null;
+  const sku = sanitizarSku((txt.match(/\bSKU\s*:?\s*([A-Z0-9][A-Z0-9._-]{2,})\b/i) || [])[1]);
   const img = ((html.match(/<img[^>]+src="(https:\/\/image\.goat\.com\/[^"]+)"/) || [])[1]) || null;
   const tot = txt.match(/Total\s*[|\s]*\$\s*([\d.,]+)/);
   const valor = tot ? parseFloat(tot[1].replace(/,/g, '')) : null;
