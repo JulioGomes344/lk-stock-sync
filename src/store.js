@@ -74,12 +74,12 @@ export function criarPedido({ loja, data_compra, valor, moeda, origem = 'manual'
   return id;
 }
 
-export function adicionarItem(pedido_id, { nome, tamanho, qtd }) {
+export function adicionarItem(pedido_id, { nome, sku = null, tamanho, qtd }) {
   const id = nanoid(10);
   db.prepare(`
-    INSERT INTO itens (id, pedido_id, nome, tamanho, qtd)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(id, pedido_id, nome, tamanho || null, qtd || 1);
+    INSERT INTO itens (id, pedido_id, nome, sku, tamanho, qtd)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, pedido_id, nome, sku || null, tamanho || null, qtd || 1);
   return id;
 }
 
@@ -273,6 +273,12 @@ export function atualizarPedidoCapturadoPorEmail(message_id, { pedido_loja, iten
       if (item.foto_url) anexarFoto(itemId, item.foto_url);
     }
     changes += 1;
+  } else if (itens.length && itensAtuais.length) {
+    const updSku = db.prepare(`UPDATE itens SET sku = ? WHERE id = ? AND (sku IS NULL OR sku = '')`);
+    itensAtuais.forEach((atual, idx) => {
+      const novo = itens[idx];
+      if (novo?.sku) changes += updSku.run(novo.sku, atual.id).changes;
+    });
   }
   return changes;
 }
@@ -474,10 +480,19 @@ export function atualizarMensagemOperador(id, { status, parserResult, errorMessa
   `).run(status || null, parserResult ? JSON.stringify(parserResult) : null, errorMessage || null, id);
 }
 
+function normalizarReferenciaProduto(ref) {
+  return String(ref || '')
+    .replace(/^#/, '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
 export function buscarPedidoPorReferencia(ref) {
   const limpo = String(ref || '').replace(/^#/, '').trim();
   if (!limpo) return null;
-  return db.prepare(`
+
+  const exato = db.prepare(`
     SELECT * FROM pedidos
     WHERE id = ?
        OR numero_pedido = ?
@@ -486,6 +501,27 @@ export function buscarPedidoPorReferencia(ref) {
        OR pedido_loja = ?
     LIMIT 1
   `).get(limpo, limpo, limpo.padStart(4, '0'), limpo, limpo);
+  if (exato) return exato;
+
+  // Match por SKU tolerante a hífen/pontuação: "HV8547-601" === "HV8547601".
+  // Usado pelos comandos de WhatsApp quando o operador digita o SKU com ou sem hífen.
+  const alvoSku = normalizarReferenciaProduto(limpo);
+  if (alvoSku.length >= 5) {
+    const candidatos = db.prepare(`
+      SELECT DISTINCT p.*
+      FROM pedidos p
+      JOIN itens i ON i.pedido_id = p.id
+      WHERE i.sku IS NOT NULL AND i.sku != '' AND p.excluido_em IS NULL
+      ORDER BY p.criado_em DESC
+    `).all();
+    const porSku = candidatos.find(p => {
+      const itens = db.prepare('SELECT sku FROM itens WHERE pedido_id = ? AND sku IS NOT NULL AND sku != ?').all(p.id, '');
+      return itens.some(i => normalizarReferenciaProduto(i.sku) === alvoSku);
+    });
+    if (porSku) return porSku;
+  }
+
+  return null;
 }
 
 function obterOuCriarLotePorCodigo(codigo) {
