@@ -1,7 +1,7 @@
 // ─── Parsers de e-mail de confirmação por loja ───
 // Mapeados a partir de e-mails reais (.eml) de cada loja em jun/2026.
 // Cada parser recebe { subject, html, text } e retorna:
-//   { pedido_loja, itens: [{ nome, tamanho, qtd, foto_url }], valor, moeda }
+//   { pedido_loja, itens: [{ nome, sku, tamanho, qtd, foto_url }], valor, moeda }
 // ou null se o e-mail não for uma confirmação de pedido parseável.
 
 const decode = (s) => (s || '')
@@ -83,6 +83,7 @@ function parseShopifyPadrao({ subject, html, text }) {
     const nome = t.replace(/\s*[×x]\s*\d+\s*$/, '').trim();
     itens.push({
       nome,
+      sku: null,
       tamanho: variantes[i] || null,
       qtd: qtdMatch ? parseInt(qtdMatch[1]) : 1,
       foto_url: imagens[i] || null
@@ -110,7 +111,7 @@ function parseALD({ subject, html }) {
     const sep = alt.lastIndexOf(' - ');
     const nome = sep > 0 ? alt.slice(0, sep) : alt;
     const tamanho = sep > 0 ? alt.slice(sep + 3) : null;
-    itens.push({ nome, tamanho, qtd: 1, foto_url: src });
+    itens.push({ nome, sku: null, tamanho, qtd: 1, foto_url: src });
   }
 
   const hLimpo = html.replace(/<[^>]+>/g, '|').replace(/\|+/g, '|').replace(/\s+/g, ' ');
@@ -122,7 +123,7 @@ function parseALD({ subject, html }) {
 }
 
 // ── STOCKX ──
-// Nº do pedido: "Order number: 03-EBHH99EL1N" | nome no subject | tamanho "US M 6" no corpo
+// Nº do pedido: "Order number: 03-EBHH99EL1N" | nome no subject | SKU/style code "HV8547-601" | tamanho "US M 6" no corpo
 // StockX NÃO envia imagem do produto (só ícones) → foto_url fica null.
 function parseStockX({ subject, html, text }) {
   const txt = textoLimpo(html, text);
@@ -143,6 +144,14 @@ function parseStockX({ subject, html, text }) {
   // tamanho: "US M 6", "US W 8.5", "US 10" etc.
   const tamanho = (txt.match(/\b(US\s*[MW]?\s*[\d.]+)\b/) || [])[1] || null;
 
+  // SKU/Style ID: StockX mostra o style code em um chip antes do tamanho
+  // (ex.: "HV8547-601 US W 7"), e em alguns e-mails também rotula como
+  // "Style ID"/"SKU". Evita capturar o nº do pedido, que costuma ter vários hífens.
+  const sku = ((txt.match(/\b(?:Style\s*ID|Style|SKU)\s*[:#]?\s*([A-Z0-9]{2,}[- ][A-Z0-9-]{2,})\b/i) || [])[1]
+    || (txt.match(/\b([A-Z]{1,4}\d{3,6}-\d{3})\b(?=\s+US\s*[MW]?\s*[\d.]+)/i) || [])[1]
+    || (txt.match(/\b([A-Z]{1,4}\d{3,6}-\d{3})\b/) || [])[1]
+    || null);
+
   // total: "Total Payment ... $377.86"
   const tm = txt.match(/Total Payment[^$]*\$\s*([\d.,]+)/i)
     || txt.match(/Purchase Price[^$]*\$\s*([\d.,]+)/i)
@@ -152,7 +161,7 @@ function parseStockX({ subject, html, text }) {
   if (!pedido) return null;
   return {
     pedido_loja: pedido,
-    itens: [{ nome, tamanho, qtd: 1, foto_url: null }],
+    itens: [{ nome, sku, tamanho, qtd: 1, foto_url: null }],
     valor, moeda: 'USD'
   };
 }
@@ -177,6 +186,8 @@ function parseGOAT({ subject, html }) {
   }
 
   const tamanho = ((txt.match(/\|\s*(US [^|/]+?)\s*\//) || [])[1] || '').trim() || null;
+  // GOAT costuma trazer a informação de forma explícita como "SKU: XXXXX" no bloco do item.
+  const sku = ((txt.match(/\bSKU\s*:?\s*([A-Z0-9][A-Z0-9._-]{2,})\b/i) || [])[1] || '').trim() || null;
   const img = ((html.match(/<img[^>]+src="(https:\/\/image\.goat\.com\/[^"]+)"/) || [])[1]) || null;
   const tot = txt.match(/Total\s*[|\s]*\$\s*([\d.,]+)/);
   const valor = tot ? parseFloat(tot[1].replace(/,/g, '')) : null;
@@ -184,7 +195,7 @@ function parseGOAT({ subject, html }) {
   if (!pedido && !nome) return null;
   return {
     pedido_loja: pedido || null,
-    itens: [{ nome: nome || 'Pedido GOAT', tamanho, qtd: 1, foto_url: img }],
+    itens: [{ nome: nome || 'Pedido GOAT', sku, tamanho, qtd: 1, foto_url: img }],
     valor, moeda: 'USD'
   };
 }
