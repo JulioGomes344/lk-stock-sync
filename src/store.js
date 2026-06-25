@@ -483,9 +483,11 @@ export function atualizarMensagemOperador(id, { status, parserResult, errorMessa
 function normalizarReferenciaProduto(ref) {
   return String(ref || '')
     .replace(/^#/, '')
+    .replace(/\bSIZE\b.*$/i, '')
     .trim()
     .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '');
+    .replace(/[^A-Z0-9]/g, '')
+    .replace(/SIZE$/i, '');
 }
 
 function itemPrincipalDoPedido(pedido_id) {
@@ -498,8 +500,12 @@ function itemPrincipalDoPedido(pedido_id) {
   `).get(pedido_id) || null;
 }
 
+function skuExibicao(sku) {
+  return String(sku || '').replace(/\s+SIZE\b.*$/i, '').trim();
+}
+
 function skuPrincipalDoPedido(pedido_id) {
-  return itemPrincipalDoPedido(pedido_id)?.sku || null;
+  return skuExibicao(itemPrincipalDoPedido(pedido_id)?.sku) || null;
 }
 
 function referenciaProdutoOperador(pedido) {
@@ -535,7 +541,7 @@ function tamanhosUsDoItem(item) {
 
 function linhasProdutoOperador(pedido) {
   const item = itemPrincipalDoPedido(pedido?.id);
-  const sku = item?.sku || `SKU NÃO CADASTRADA (#${pedido?.numero_pedido || '?'})`;
+  const sku = skuExibicao(item?.sku) || `SKU NÃO CADASTRADA (#${pedido?.numero_pedido || '?'})`;
   const tamanhos = tamanhosUsDoItem(item);
   return [
     sku,
