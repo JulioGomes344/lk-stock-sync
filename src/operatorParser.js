@@ -29,6 +29,23 @@ function cleanSkuLine(line) {
     .trim();
 }
 
+function parseUsSizeLine(line) {
+  const raw = String(line || '').trim();
+  const value = raw.match(/(\d+(?:\.5)?)/)?.[1];
+  if (!value) return null;
+  if (/US\s+(?:MENS?|MEN'?S|UNISEX|M\b)/i.test(raw)) return { mens: parseFloat(value) };
+  if (/US\s+(?:WOMENS?|WOMEN'?S|W\b)/i.test(raw)) return { womens: parseFloat(value) };
+  return null;
+}
+
+function parseUsSizes(lines) {
+  return lines.reduce((acc, line) => {
+    const parsed = parseUsSizeLine(line);
+    if (!parsed) return acc;
+    return { ...acc, ...parsed };
+  }, {});
+}
+
 function looksLikeSku(line) {
   const sku = cleanSkuLine(line);
   return /^[A-Z0-9][A-Z0-9._-]{3,}$/i.test(sku) && !/^US\b/i.test(sku);
@@ -39,7 +56,8 @@ function parseReceivedBlock(text) {
   if (!/^recebido\b/i.test(lines[0] || '')) return null;
   const skuLine = lines.slice(1).find(looksLikeSku);
   if (!skuLine) return null;
-  return { intent: 'mark_received', orderRef: cleanSkuLine(skuLine), confidence: 'high' };
+  const sizes = parseUsSizes(lines.slice(1));
+  return { intent: 'mark_received', orderRef: cleanSkuLine(skuLine), sizes, confidence: 'high' };
 }
 
 function parseShippedBlock(text) {
