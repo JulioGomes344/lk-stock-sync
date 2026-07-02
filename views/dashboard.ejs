@@ -60,7 +60,7 @@
     </div>
   </header>
 
-  <main class="w-full max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 flex-1" x-data="{ modal:null, busca:'', filtroSem:'' }">
+  <main class="w-full max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 flex-1" x-data="{ modal:<%= filtrosCompras.manualProduto ? '\'pedido\'' : 'null' %>, busca:'', filtroSem:'' }">
     <% const labels = {pendente:'Pendente', recebido:'Recebido', enviado:'Enviado', entregue:'Entregue', prioridade:'Prioridade', cancelados:'Cancelados', lotes:'Lotes', lixeira:'Lixeira', whatsapp:'WhatsApp'} %>
 
     <!-- TÍTULO DA PÁGINA -->
@@ -167,7 +167,7 @@
           <template x-for="(item,i) in itens" :key="i">
             <div class="mb-4 pb-4 border-b border-lightgray md:border-0 md:pb-0 md:mb-3">
               <div class="grid grid-cols-12 gap-2">
-                <input class="col-span-12 md:col-span-5" name="item_nome" placeholder="Nome do produto">
+                <input class="col-span-12 md:col-span-5" name="item_nome" placeholder="Nome do produto" value="<%= filtrosCompras.manualProduto || '' %>">
                 <input class="col-span-5 md:col-span-3" name="item_sku" placeholder="SKU / Style ID">
                 <input class="col-span-4 md:col-span-2" name="item_tamanho" placeholder="Tam.">
                 <input class="col-span-2 md:col-span-1" type="number" inputmode="numeric" name="item_qtd" value="1" min="1">
@@ -268,6 +268,12 @@
                     <% if (h.error_message) { %>
                       <div class="text-[10px] mt-2" style="color:#c4463a">Erro: <%= h.error_message %></div>
                     <% } %>
+                    <% const msgBuscaManual = String((h.status || '') + ' ' + (h.error_message || '') + ' ' + (h.raw_message || '')).toLowerCase(); %>
+                    <% const produtoNaoEncontrado = /not[_ -]?found|não encontrado|nao encontrado|pedido não encontrado|produto não encontrado|sku não cadastrada|sku nao cadastrada/.test(msgBuscaManual); %>
+                    <% if (produtoNaoEncontrado) { %>
+                      <% const produtoManual = String(h.raw_message || h.error_message || '').replace(/^(recebido|enviado|entregue|tracking|problema|obs|lote)\b/i, '').trim() || String(h.raw_message || h.error_message || 'Produto não encontrado'); %>
+                      <a class="btn btn-dark mt-3" href="/?aba=pendente&manualProduto=<%= encodeURIComponent(produtoManual) %>">Registrar manual</a>
+                    <% } %>
                   </div>
                   <div class="md:text-right text-xs text-medgray font-light min-w-[180px]">
                     <% if (h.old_status || h.new_status) { %>
@@ -285,7 +291,34 @@
         <% } %>
       </div>
     <% } else if (aba !== 'lotes') { %>
-    <div class="mb-5">
+    <div class="mb-5 grid gap-3">
+      <form method="GET" action="/" class="grid grid-cols-1 md:grid-cols-3 gap-3 border border-lightgray bg-white p-3">
+        <input type="hidden" name="aba" value="<%= aba %>">
+        <div>
+          <label>Redirecionar compra para</label>
+          <select name="redirecionar_para" onchange="this.form.requestSubmit()">
+            <option value="">Todos</option>
+            <% redirecionarOptions.forEach(opt => { %>
+              <option value="<%= opt %>" <%= filtrosCompras.redirecionar_para === opt ? 'selected' : '' %>><%= opt %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div>
+          <label>Estoque / Encomenda</label>
+          <select name="tipo_origem" onchange="this.form.requestSubmit()">
+            <option value="" <%= !filtrosCompras.tipo_origem ? 'selected' : '' %>>Todos</option>
+            <option value="estoque" <%= filtrosCompras.tipo_origem === 'estoque' ? 'selected' : '' %>>Estoque</option>
+            <option value="encomenda" <%= filtrosCompras.tipo_origem === 'encomenda' ? 'selected' : '' %>>Encomenda</option>
+            <option value="sem_tipo" <%= filtrosCompras.tipo_origem === 'sem_tipo' ? 'selected' : '' %>>Sem Estoque/Encomenda</option>
+          </select>
+        </div>
+        <div class="flex items-end gap-3">
+          <a href="/?aba=<%= aba %>" class="btn btn-out w-full">Limpar filtros</a>
+        </div>
+        <div class="md:col-span-3 text-medgray text-[10px] font-light">
+          Exibindo <%= pedidos.length %> de <%= totalPedidosSemFiltro %> pedido(s) nesta aba.
+        </div>
+      </form>
       <input type="search" x-model="busca" placeholder="Buscar por produto, loja ou número..."
              class="!bg-white" style="max-width:420px">
     </div>
@@ -726,5 +759,50 @@
     </div>
   </footer>
 
+  <script>
+    (() => {
+      function showToast(text) {
+        let el = document.querySelector('[data-ajax-toast]');
+        if (!el) {
+          el = document.createElement('div');
+          el.setAttribute('data-ajax-toast', '1');
+          el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:9999;background:#0a0a0a;color:#fff;padding:10px 14px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase';
+          document.body.appendChild(el);
+        }
+        el.textContent = text;
+        setTimeout(() => { if (el) el.remove(); }, 1800);
+      }
+      async function refreshPage(url, scrollY) {
+        const response = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'text/html' } });
+        const html = await response.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const nextMain = doc.querySelector('main');
+        if (!response.ok || !nextMain) throw new Error('Falha ao atualizar');
+        document.querySelector('main').replaceWith(nextMain);
+        history.replaceState(null, '', response.url || url);
+        requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0, behavior: 'auto' }));
+      }
+      document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if (String(form.method || '').toLowerCase() !== 'post') return;
+        if (form.enctype && form.enctype.includes('multipart/form-data')) return;
+        if (!form.closest('main')) return;
+        event.preventDefault();
+        const submitter = event.submitter;
+        const scrollY = window.scrollY;
+        if (submitter) submitter.disabled = true;
+        try {
+          const response = await fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: { Accept: 'text/html' } });
+          await refreshPage(response.url || window.location.href, scrollY);
+          showToast('Atualizado');
+        } catch (err) {
+          form.submit();
+        } finally {
+          if (submitter) submitter.disabled = false;
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
