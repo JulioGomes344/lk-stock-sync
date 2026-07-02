@@ -153,15 +153,30 @@ app.use(exigirLogin);
 // ── DASHBOARD (3 abas) ──
 app.get('/', (req, res) => {
   const aba = ['pendente', 'recebido', 'enviado', 'entregue', 'prioridade', 'cancelados', 'lotes', 'lixeira', 'whatsapp'].includes(req.query.aba) ? req.query.aba : 'pendente';
+  const filtroRedirecionar = String(req.query.redirecionar_para || '').trim();
+  const filtroTipoOrigem = ['estoque', 'encomenda', 'sem_tipo'].includes(String(req.query.tipo_origem || '')) ? String(req.query.tipo_origem) : '';
+  const manualProduto = String(req.query.manualProduto || '').trim();
+  const pedidosBase = aba === 'lixeira' ? store.listarLixeira()
+           : aba === 'whatsapp' ? []
+           : aba === 'prioridade' ? store.listarPrioridade()
+           : aba === 'cancelados' ? store.listarCancelados()
+           : store.listarPorStatus(aba);
+  const redirecionarOptions = [...new Set(pedidosBase.map(p => String(p.redirecionar_para || '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const pedidosFiltrados = pedidosBase.filter(p => {
+    if (filtroRedirecionar && String(p.redirecionar_para || '').trim() !== filtroRedirecionar) return false;
+    if (filtroTipoOrigem === 'estoque' || filtroTipoOrigem === 'encomenda') return p.tipo_origem === filtroTipoOrigem;
+    if (filtroTipoOrigem === 'sem_tipo') return !p.tipo_origem;
+    return true;
+  });
   res.render('dashboard', {
     aba,
     resumo: store.resumo(),
     resumoSemaforo: store.resumoSemaforo(),
-    pedidos: aba === 'lixeira' ? store.listarLixeira()
-           : aba === 'whatsapp' ? []
-           : aba === 'prioridade' ? store.listarPrioridade()
-           : aba === 'cancelados' ? store.listarCancelados()
-           : store.listarPorStatus(aba),
+    pedidos: pedidosFiltrados,
+    totalPedidosSemFiltro: pedidosBase.length,
+    filtrosCompras: { redirecionar_para: filtroRedirecionar, tipo_origem: filtroTipoOrigem, manualProduto },
+    redirecionarOptions,
     lotes: store.listarLotesComPedidos(),
     lotesLixeira: aba === 'lixeira' ? store.listarLotesLixeira() : [],
     lotesAtivos: store.listarLotesAtivos(),
