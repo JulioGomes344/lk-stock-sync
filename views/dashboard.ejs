@@ -560,7 +560,7 @@
                 <input type="text" name="redirecionar_para" value="<%= p.redirecionar_para || '' %>"
                        placeholder="Nome de quem vai receber / redirecionar"
                        class="flex-1">
-                <button type="submit" class="btn btn-out w-full md:w-auto">Salvar</button>
+                <button type="submit" onclick="return submitInlineAction(this)" class="btn btn-out w-full md:w-auto">Salvar</button>
               </div>
             </form>
 
@@ -569,12 +569,12 @@
               <div class="flex items-center gap-2">
                 <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
                   <input type="hidden" name="tipo" value="estoque">
-                  <button type="submit" class="btn w-full md:w-auto <%= p.tipo_origem === 'estoque' ? 'btn-dark' : 'btn-out' %>"
+                  <button type="submit" onclick="return submitInlineAction(this)" class="btn w-full md:w-auto <%= p.tipo_origem === 'estoque' ? 'btn-dark' : 'btn-out' %>"
                           <% if (p.tipo_origem === 'estoque') { %>style="background:#3a7d44"<% } %>>Estoque</button>
                 </form>
                 <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
                   <input type="hidden" name="tipo" value="encomenda">
-                  <button type="submit" class="btn w-full md:w-auto <%= p.tipo_origem === 'encomenda' ? 'btn-dark' : 'btn-out' %>"
+                  <button type="submit" onclick="return submitInlineAction(this)" class="btn w-full md:w-auto <%= p.tipo_origem === 'encomenda' ? 'btn-dark' : 'btn-out' %>"
                           <% if (p.tipo_origem === 'encomenda') { %>style="background:#92620a"<% } %>>Encomenda</button>
                 </form>
               </div>
@@ -853,6 +853,28 @@
   </main>
 
   <script>
+    function submitInlineAction(button) {
+      const form = button && button.closest ? button.closest('form') : null;
+      if (!form) return true;
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Salvando...';
+      fetch(form.action, {
+        method: 'POST',
+        body: new URLSearchParams(new FormData(form)),
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      }).then(response => {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        window.location.reload();
+      }).catch(error => {
+        button.disabled = false;
+        button.textContent = originalText;
+        alert('Não foi possível salvar. Recarregue a página e tente de novo. ' + error.message);
+      });
+      return false;
+    }
+
     function comprasDashboard(initialModal = null) {
       return {
         modal: initialModal,
