@@ -63,12 +63,12 @@
       <div style="font-weight:500;font-size:16px;letter-spacing:7px" class="md:!text-lg md:!tracking-[8px]">LK SNEAKERS</div>
       <div class="flex items-center gap-5">
         <div class="kicker hidden md:block" style="color:#b5b0a8">Compras Internacionais</div>
-        <a href="<%= basePath %>/logout" class="kicker" style="color:#b5b0a8;border-bottom:1px solid rgba(255,255,255,.25);padding-bottom:2px;min-height:auto">Sair</a>
+        <a href="/logout" class="kicker" style="color:#b5b0a8;border-bottom:1px solid rgba(255,255,255,.25);padding-bottom:2px;min-height:auto">Sair</a>
       </div>
     </div>
   </header>
 
-  <main class="w-full max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 flex-1" x-data="comprasDashboard()" x-init="init()">
+  <main class="w-full max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 flex-1" x-data="comprasDashboard(<%= filtrosCompras.manualProduto ? '\'pedido\'' : 'null' %>)" x-init="init()">
     <% const labels = {pendente:'Pendente', recebido:'Recebido', enviado:'Enviado', entregue:'Entregue', prioridade:'Prioridade', cancelados:'Cancelados', lotes:'Lotes', lixeira:'Lixeira', whatsapp:'WhatsApp'} %>
 
     <!-- TÍTULO DA PÁGINA -->
@@ -89,7 +89,7 @@
        ] %>
     <div class="grid grid-cols-3 md:grid-cols-5 gap-px bg-lightgray border border-lightgray mb-6 md:mb-8">
       <% kpis.forEach(k => { %>
-        <a href="<%= basePath %>?aba=<%= k.aba %>" class="p-4 md:p-6 text-center transition <%= aba===k.aba ? 'bg-black text-white' : 'bg-white hover:bg-offwhite' %>">
+        <a href="/?aba=<%= k.aba %>" class="p-4 md:p-6 text-center transition <%= aba===k.aba ? 'bg-black text-white' : 'bg-white hover:bg-offwhite' %>">
           <div class="font-display text-3xl md:text-4xl font-light"><%= k.valor %></div>
           <div class="kicker mt-1 md:mt-2" style="<%= aba===k.aba ? 'color:#b5b0a8' : '' %>"><%= k.label %></div>
         </a>
@@ -138,8 +138,8 @@
     <div class="grid grid-cols-2 md:flex md:flex-wrap gap-2 md:gap-3 mb-6 md:mb-8">
       <button @click="modal='pedido'" class="btn btn-dark">+ Novo Pedido</button>
       <button @click="modal='lote'" class="btn btn-out">+ Novo Lote</button>
-      <a href="<%= basePath %>/check-atrasos" class="btn btn-out" style="border-color:#c4463a;color:#c4463a">Verificar Atrasos</a>
-      <a href="<%= basePath %>/sync-gmail" class="btn btn-out">Sincronizar Gmail</a>
+      <a href="/check-atrasos" class="btn btn-out" style="border-color:#c4463a;color:#c4463a">Verificar Atrasos</a>
+      <a href="/sync-gmail" class="btn btn-out">Sincronizar Gmail</a>
     </div>
 
     <!-- MODAL NOVO PEDIDO -->
@@ -153,7 +153,7 @@
           <button type="button" class="acao-link text-medgray text-lg" style="letter-spacing:0" @click="modal=null">×</button>
         </div>
         <p class="text-medgray text-xs font-light mt-1 mb-5">O número do pedido é gerado automaticamente.</p>
-        <form method="POST" action="<%= basePath %>/pedidos" enctype="multipart/form-data">
+        <form method="POST" action="/pedidos" enctype="multipart/form-data">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div><label>Loja</label>
               <select name="loja" x-model="lojaSel" required>
@@ -175,7 +175,7 @@
           <template x-for="(item,i) in itens" :key="i">
             <div class="mb-4 pb-4 border-b border-lightgray md:border-0 md:pb-0 md:mb-3">
               <div class="grid grid-cols-12 gap-2">
-                <input class="col-span-12 md:col-span-5" name="item_nome" placeholder="Nome do produto">
+                <input class="col-span-12 md:col-span-5" name="item_nome" placeholder="Nome do produto" value="<%= filtrosCompras.manualProduto || '' %>">
                 <input class="col-span-5 md:col-span-3" name="item_sku" placeholder="SKU / Style ID">
                 <input class="col-span-4 md:col-span-2" name="item_tamanho" placeholder="Tam.">
                 <input class="col-span-2 md:col-span-1" type="number" inputmode="numeric" name="item_qtd" value="1" min="1">
@@ -208,7 +208,7 @@
           </div>
           <button type="button" class="acao-link text-medgray text-lg" style="letter-spacing:0" @click="modal=null">×</button>
         </div>
-        <form method="POST" action="<%= basePath %>/lotes" class="mt-5">
+        <form method="POST" action="/lotes" class="mt-5">
           <div class="mb-4"><label>Descrição</label><input name="descricao" placeholder="Ex: Envio EUA — Julho/01"></div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div><label>Transportadora</label><input name="transportadora" placeholder="DHL, FedEx..."></div>
@@ -266,13 +266,13 @@
     <!-- TABS (roláveis no mobile) -->
     <div class="flex items-center gap-4 md:gap-8 border-b border-lightgray mb-5 overflow-x-auto" style="scrollbar-width:none">
       <% for (const k of ['pendente','recebido','enviado','entregue']) { %>
-        <a href="<%= basePath %>?aba=<%= k %>" class="tab <%= aba===k?'active':'' %>"><%= labels[k] %></a>
+        <a href="/?aba=<%= k %>" class="tab <%= aba===k?'active':'' %>"><%= labels[k] %></a>
       <% } %>
-      <a href="<%= basePath %>?aba=prioridade" class="tab <%= aba==='prioridade'?'active':'' %>">Prioridade</a>
-      <a href="<%= basePath %>?aba=cancelados" class="tab <%= aba==='cancelados'?'active':'' %>">Cancelados</a>
-      <a href="<%= basePath %>?aba=lotes" class="tab <%= aba==='lotes'?'active':'' %>">Lotes</a>
-      <a href="<%= basePath %>?aba=whatsapp" class="tab <%= aba==='whatsapp'?'active':'' %>">WhatsApp</a>
-      <a href="<%= basePath %>?aba=lixeira" class="tab <%= aba==='lixeira'?'active':'' %>" style="margin-left:auto;<%= aba==='lixeira'?'':'color:#b5b0a8' %>">Lixeira</a>
+      <a href="/?aba=prioridade" class="tab <%= aba==='prioridade'?'active':'' %>">Prioridade</a>
+      <a href="/?aba=cancelados" class="tab <%= aba==='cancelados'?'active':'' %>">Cancelados</a>
+      <a href="/?aba=lotes" class="tab <%= aba==='lotes'?'active':'' %>">Lotes</a>
+      <a href="/?aba=whatsapp" class="tab <%= aba==='whatsapp'?'active':'' %>">WhatsApp</a>
+      <a href="/?aba=lixeira" class="tab <%= aba==='lixeira'?'active':'' %>" style="margin-left:auto;<%= aba==='lixeira'?'':'color:#b5b0a8' %>">Lixeira</a>
     </div>
 
     <% if (aba === 'whatsapp') { %>
@@ -344,6 +344,12 @@
                     <% if (h.error_message) { %>
                       <div class="text-[10px] mt-2" style="color:#c4463a">Erro: <%= h.error_message %></div>
                     <% } %>
+                    <% const msgBuscaManual = String((h.status || '') + ' ' + (h.error_message || '') + ' ' + (h.raw_message || '')).toLowerCase(); %>
+                    <% const produtoNaoEncontrado = /not[_ -]?found|não encontrado|nao encontrado|pedido não encontrado|produto não encontrado|sku não cadastrada|sku nao cadastrada/.test(msgBuscaManual); %>
+                    <% if (produtoNaoEncontrado) { %>
+                      <% const produtoManual = String(h.raw_message || h.error_message || '').replace(/^(recebido|enviado|entregue|tracking|problema|obs|lote)\b/i, '').trim() || String(h.raw_message || h.error_message || 'Produto não encontrado'); %>
+                      <a class="btn btn-dark mt-3" href="/?aba=pendente&manualProduto=<%= encodeURIComponent(produtoManual) %>">Registrar manual</a>
+                    <% } %>
                   </div>
                   <div class="md:text-right text-xs text-medgray font-light min-w-[180px]">
                     <% if (h.old_status || h.new_status) { %>
@@ -361,7 +367,34 @@
         <% } %>
       </div>
     <% } else if (aba !== 'lotes') { %>
-    <!-- LISTA DE PEDIDOS -->
+    <div class="mb-5 grid gap-3">
+      <form method="GET" action="/" class="grid grid-cols-1 md:grid-cols-3 gap-3 border border-lightgray bg-white p-3">
+        <input type="hidden" name="aba" value="<%= aba %>">
+        <div>
+          <label>Redirecionar compra para</label>
+          <select name="redirecionar_para" onchange="this.form.requestSubmit()">
+            <option value="">Todos</option>
+            <% redirecionarOptions.forEach(opt => { %>
+              <option value="<%= opt %>" <%= filtrosCompras.redirecionar_para === opt ? 'selected' : '' %>><%= opt %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div>
+          <label>Estoque / Encomenda</label>
+          <select name="tipo_origem" onchange="this.form.requestSubmit()">
+            <option value="" <%= !filtrosCompras.tipo_origem ? 'selected' : '' %>>Todos</option>
+            <option value="estoque" <%= filtrosCompras.tipo_origem === 'estoque' ? 'selected' : '' %>>Estoque</option>
+            <option value="encomenda" <%= filtrosCompras.tipo_origem === 'encomenda' ? 'selected' : '' %>>Encomenda</option>
+            <option value="sem_tipo" <%= filtrosCompras.tipo_origem === 'sem_tipo' ? 'selected' : '' %>>Sem Estoque/Encomenda</option>
+          </select>
+        </div>
+        <div class="flex items-end gap-3">
+          <a href="/?aba=<%= aba %>" class="btn btn-out w-full">Limpar filtros</a>
+        </div>
+        <div class="md:col-span-3 text-medgray text-[10px] font-light">
+          Exibindo <%= pedidos.length %> de <%= totalPedidosSemFiltro %> pedido(s) nesta aba.
+        </div>
+
     <% if (pedidos.length === 0) { %>
       <div class="py-16 md:py-20 text-center border border-lightgray bg-white">
         <div class="kicker mb-2"><%= aba==='lixeira' ? 'Lixeira' : labels[aba] || aba %></div>
@@ -422,12 +455,12 @@
             <div class="flex flex-wrap items-center gap-2 md:gap-3 mt-3" @click.stop>
               <button type="button" class="quick-action" style="color:#0a0a0a" @click="open=!open" x-text="open ? 'Fechar' : 'Detalhes'"></button>
               <% if (p.status==='pendente' && aba!=='lixeira' && aba!=='cancelados') { %>
-                <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/receber">
+                <form method="POST" action="/pedidos/<%= p.id %>/receber">
                   <button class="quick-action quick-action-green">Recebido</button>
                 </form>
               <% } %>
               <% if (p.status==='recebido' && aba!=='lixeira' && aba!=='cancelados' && lotesAtivos.length) { %>
-                <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/enviar" class="flex items-center gap-1">
+                <form method="POST" action="/pedidos/<%= p.id %>/enviar" class="flex items-center gap-1">
                   <select name="lote_id" required class="!text-[11px] !py-1 !px-2 !w-28 md:!w-36" aria-label="Lote">
                     <option value="">Lote...</option>
                     <% lotesAtivos.forEach(l => { %><option value="<%= l.id %>"><%= l.descricao || l.id %></option><% }) %>
@@ -436,16 +469,16 @@
                 </form>
               <% } %>
               <% if (p.status==='enviado' && aba!=='lixeira' && aba!=='cancelados') { %>
-                <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/entregar" onsubmit="return confirm('Marcar o pedido #<%= p.numero_pedido %> como ENTREGUE?')">
+                <form method="POST" action="/pedidos/<%= p.id %>/entregar" onsubmit="return confirm('Marcar o pedido #<%= p.numero_pedido %> como ENTREGUE?')">
                   <button class="quick-action quick-action-green">Entregue</button>
                 </form>
               <% } %>
               <% if (aba !== 'lixeira' && aba !== 'cancelados') { %>
-                <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/cancelar"
+                <form method="POST" action="/pedidos/<%= p.id %>/cancelar"
                       onsubmit="return confirm('Marcar o pedido #<%= p.numero_pedido %> como CANCELADO?')">
                   <button class="quick-action" style="color:#92620a">Cancelar</button>
                 </form>
-                <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/excluir"
+                <form method="POST" action="/pedidos/<%= p.id %>/excluir"
                       onsubmit="return confirm('Mover o pedido #<%= p.numero_pedido %> para a lixeira?')">
                   <button class="quick-action quick-action-red">Excluir</button>
                 </form>
@@ -459,11 +492,11 @@
           <div class="mt-4 pt-4 border-t border-lightgray flex flex-col md:flex-row md:items-center gap-3" @click.stop>
             <span class="text-medgray text-[10px] font-light">Cancelado em <%= (p.cancelado_em || '').slice(0,16) %></span>
             <div class="flex flex-wrap items-center gap-2 md:ml-auto">
-              <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/recompra"
+              <form method="POST" action="/pedidos/<%= p.id %>/recompra"
                     onsubmit="return confirm('Confirmar a RECOMPRA do pedido #<%= p.numero_pedido %>? Ele volta para Pendente com a data de compra de hoje.')">
                 <button class="btn btn-dark" style="background:#3a7d44">Confirmei a recompra</button>
               </form>
-              <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/excluir"
+              <form method="POST" action="/pedidos/<%= p.id %>/excluir"
                     onsubmit="return confirm('Mover o pedido cancelado #<%= p.numero_pedido %> para a lixeira?')">
                 <button class="btn btn-out" style="border-color:#c4463a;color:#c4463a">Excluir</button>
               </form>
@@ -476,13 +509,13 @@
           <div class="mt-4 pt-4 border-t border-lightgray flex flex-col md:flex-row md:items-center gap-3" x-data="{ confirmar:false }" @click.stop>
             <span class="text-medgray text-[10px] font-light">Na lixeira desde <%= (p.excluido_em || '').slice(0,16) %></span>
             <div class="flex flex-wrap items-center gap-2 md:ml-auto">
-              <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/restaurar">
+              <form method="POST" action="/pedidos/<%= p.id %>/restaurar">
                 <button class="btn btn-out">Restaurar</button>
               </form>
               <button type="button" class="btn btn-out" style="border-color:#c4463a;color:#c4463a"
                       x-show="!confirmar" @click="confirmar=true">Excluir definitivamente</button>
             </div>
-            <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/excluir-definitivo"
+            <form method="POST" action="/pedidos/<%= p.id %>/excluir-definitivo"
                   x-show="confirmar" x-cloak class="flex flex-wrap items-center gap-2 w-full md:w-auto"
                   onsubmit="return confirm('ATENÇÃO: exclusão definitiva. Não há como recuperar. Continuar?')">
               <input type="password" name="senha" placeholder="Senha" required
@@ -509,7 +542,7 @@
           <!-- REDIRECIONAMENTO DA COMPRA (texto livre, salvo no pedido) -->
           <% if (aba!=='lixeira') { %>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-            <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/redirecionar">
+            <form method="POST" action="/pedidos/<%= p.id %>/redirecionar">
               <label>Redirecionar compra para</label>
               <div class="flex flex-col md:flex-row gap-2 md:items-center">
                 <input type="text" name="redirecionar_para" value="<%= p.redirecionar_para || '' %>"
@@ -522,12 +555,12 @@
             <div>
               <label>Origem do produto</label>
               <div class="flex items-center gap-2">
-                <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
+                <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
                   <input type="hidden" name="tipo" value="estoque">
                   <button class="btn w-full md:w-auto <%= p.tipo_origem === 'estoque' ? 'btn-dark' : 'btn-out' %>"
                           <% if (p.tipo_origem === 'estoque') { %>style="background:#3a7d44"<% } %>>Estoque</button>
                 </form>
-                <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
+                <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
                   <input type="hidden" name="tipo" value="encomenda">
                   <button class="btn w-full md:w-auto <%= p.tipo_origem === 'encomenda' ? 'btn-dark' : 'btn-out' %>"
                           <% if (p.tipo_origem === 'encomenda') { %>style="background:#92620a"<% } %>>Encomenda</button>
@@ -543,7 +576,7 @@
               <div class="kicker mb-2">Notificar por e-mail</div>
 
               <!-- Confirmação de compra: 4 blocos de destinatário -->
-              <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/confirmar-compra" class="mb-2"
+              <form method="POST" action="/pedidos/<%= p.id %>/confirmar-compra" class="mb-2"
                     @submit="$refs.destino.value = emails.map(e=>e.trim()).filter(Boolean).join(', ')"
                     onsubmit="return confirm('Enviar e-mail de CONFIRMAÇÃO DE COMPRA do pedido #<%= p.numero_pedido %>?')">
                 <input type="hidden" name="destinatario" x-ref="destino">
@@ -557,12 +590,12 @@
               </form>
 
               <div class="flex flex-col md:flex-row gap-2 mt-3">
-                <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/avisar"
+                <form method="POST" action="/pedidos/<%= p.id %>/avisar"
                       onsubmit="return confirm('Enviar e-mail de AVISO DE ATRASO do pedido #<%= p.numero_pedido %>?')">
                   <input type="hidden" name="tipo" value="atraso">
                   <button class="btn btn-out w-full md:w-auto" style="border-color:#c4463a;color:#c4463a">Avisar Atraso</button>
                 </form>
-                <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/avisar"
+                <form method="POST" action="/pedidos/<%= p.id %>/avisar"
                       onsubmit="return confirm('Enviar e-mail de PRIORIZAÇÃO DE ENVIO do pedido #<%= p.numero_pedido %>?')">
                   <input type="hidden" name="tipo" value="prioridade">
                   <button class="btn btn-out w-full md:w-auto">Priorizar Envio</button>
@@ -578,7 +611,7 @@
                 <% const editavel = (p.status!=='entregue' && aba!=='lixeira' && aba!=='cancelados') %>
                 <% if (editavel) { %>
                   <!-- DROPZONE: clique ou arraste a imagem (troca/adiciona foto) -->
-                  <form method="POST" action="<%= basePath %>/itens/<%= it.id %>/foto" enctype="multipart/form-data" class="flex-shrink-0"
+                  <form method="POST" action="/itens/<%= it.id %>/foto" enctype="multipart/form-data" class="flex-shrink-0"
                         x-data="{ over:false }" x-ref="form">
                     <input type="file" name="foto" accept="image/*" id="foto_<%= it.id %>" x-ref="inp"
                            class="hidden" onchange="this.form.submit()">
@@ -613,7 +646,7 @@
 
           <!-- AÇÃO: RECEBER (só na aba pendente) -->
           <% if (p.status==='pendente' && aba!=='lixeira' && aba!=='cancelados') { %>
-            <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/receber">
+            <form method="POST" action="/pedidos/<%= p.id %>/receber">
               <button class="btn btn-dark">Marcar como Recebido →</button>
             </form>
             <p class="text-medgray text-[10px] mt-2 font-light">Use quando quem faz o frete recebeu o produto no endereço dele.</p>
@@ -621,7 +654,7 @@
 
           <!-- AÇÃO: ENVIAR (só na aba recebido) -->
           <% if (p.status==='recebido' && aba!=='lixeira' && aba!=='cancelados') { %>
-            <form method="POST" action="<%= basePath %>/pedidos/<%= p.id %>/enviar" class="flex flex-col md:flex-row md:items-end gap-3">
+            <form method="POST" action="/pedidos/<%= p.id %>/enviar" class="flex flex-col md:flex-row md:items-end gap-3">
               <div class="flex-1 md:min-w-[200px]">
                 <label>Vincular ao Lote (obrigatório)</label>
                 <select name="lote_id" required>
@@ -658,14 +691,14 @@
                 </div>
               </div>
               <div class="flex flex-wrap items-center gap-2">
-                <form method="POST" action="<%= basePath %>/lotes/<%= l.id %>/restaurar">
+                <form method="POST" action="/lotes/<%= l.id %>/restaurar">
                   <button class="btn btn-out">Restaurar</button>
                 </form>
                 <button type="button" class="btn btn-out" style="border-color:#c4463a;color:#c4463a"
                         x-show="!confirmar" @click="confirmar=true">Excluir definitivamente</button>
               </div>
             </div>
-            <form method="POST" action="<%= basePath %>/lotes/<%= l.id %>/excluir-definitivo"
+            <form method="POST" action="/lotes/<%= l.id %>/excluir-definitivo"
                   x-show="confirmar" x-cloak class="flex flex-wrap items-center gap-2 mt-3"
                   onsubmit="return confirm('ATENÇÃO: exclusão definitiva do lote. Não há como recuperar. Continuar?')">
               <input type="password" name="senha" placeholder="Senha" required
@@ -712,11 +745,11 @@
                 </div>
               </div>
               <div class="flex flex-col md:flex-row gap-2">
-                <form method="POST" action="<%= basePath %>/lotes/<%= l.id %>/entregar"
+                <form method="POST" action="/lotes/<%= l.id %>/entregar"
                       onsubmit="return confirm('Marcar todos os <%= l.pedidos.length %> pedidos deste lote como entregues?')">
                   <button class="btn btn-out w-full md:w-auto">Lote chegou → Entregue</button>
                 </form>
-                <form method="POST" action="<%= basePath %>/lotes/<%= l.id %>/excluir"
+                <form method="POST" action="/lotes/<%= l.id %>/excluir"
                       onsubmit="return confirm('Mover o lote para a lixeira? Os <%= l.pedidos.length %> pedido(s) enviado(s) dele voltarão para Recebido.')">
                   <button class="btn btn-out w-full md:w-auto" style="border-color:#c4463a;color:#c4463a">Excluir</button>
                 </form>
@@ -760,7 +793,7 @@
                 </div>
               </div>
               <button @click="aberto=!aberto" class="acao-link" style="color:#0a0a0a" x-text="aberto ? 'Fechar' : 'Ver pedidos'"></button>
-              <form method="POST" action="<%= basePath %>/lotes/<%= l.id %>/excluir"
+              <form method="POST" action="/lotes/<%= l.id %>/excluir"
                     onsubmit="return confirm('Mover o lote entregue para a lixeira? Os pedidos entregues não serão alterados.')">
                 <button class="acao-link" style="color:#c4463a">Excluir</button>
               </form>
@@ -795,7 +828,7 @@
                 · <%= l.pedidos.length %> pedido(s)
               </div>
             </div>
-            <form method="POST" action="<%= basePath %>/lotes/<%= l.id %>/entregar"
+            <form method="POST" action="/lotes/<%= l.id %>/entregar"
                   onsubmit="return confirm('Marcar todos os <%= l.pedidos.length %> pedidos deste lote como entregues?')">
               <button class="btn btn-out w-full md:w-auto">Lote chegou → Entregue</button>
             </form>
@@ -808,9 +841,9 @@
   </main>
 
   <script>
-    function comprasDashboard() {
+    function comprasDashboard(initialModal = null) {
       return {
-        modal: null,
+        modal: initialModal,
         busca: '',
         filtroSem: '',
         tipoOrigem: '',
@@ -876,5 +909,50 @@
     </div>
   </footer>
 
+  <script>
+    (() => {
+      function showToast(text) {
+        let el = document.querySelector('[data-ajax-toast]');
+        if (!el) {
+          el = document.createElement('div');
+          el.setAttribute('data-ajax-toast', '1');
+          el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:9999;background:#0a0a0a;color:#fff;padding:10px 14px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase';
+          document.body.appendChild(el);
+        }
+        el.textContent = text;
+        setTimeout(() => { if (el) el.remove(); }, 1800);
+      }
+      async function refreshPage(url, scrollY) {
+        const response = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'text/html' } });
+        const html = await response.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const nextMain = doc.querySelector('main');
+        if (!response.ok || !nextMain) throw new Error('Falha ao atualizar');
+        document.querySelector('main').replaceWith(nextMain);
+        history.replaceState(null, '', response.url || url);
+        requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0, behavior: 'auto' }));
+      }
+      document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if (String(form.method || '').toLowerCase() !== 'post') return;
+        if (form.enctype && form.enctype.includes('multipart/form-data')) return;
+        if (!form.closest('main')) return;
+        event.preventDefault();
+        const submitter = event.submitter;
+        const scrollY = window.scrollY;
+        if (submitter) submitter.disabled = true;
+        try {
+          const response = await fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: { Accept: 'text/html' } });
+          await refreshPage(response.url || window.location.href, scrollY);
+          showToast('Atualizado');
+        } catch (err) {
+          form.submit();
+        } finally {
+          if (submitter) submitter.disabled = false;
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
