@@ -551,6 +551,46 @@ function tamanhosUsDoItem(item) {
   return { mens: '—', womens: raw || '—' };
 }
 
+function numeroTamanho(valor) {
+  const match = String(valor ?? '').match(/\d+(?:\.5)?/);
+  return match ? parseFloat(match[0]) : null;
+}
+
+function tamanhoIgual(a, b) {
+  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) < 0.01;
+}
+
+function sistemaTamanhoDoItem(item) {
+  const raw = String(item?.tamanho || '').trim();
+  if (/\bUS\s*W\b|\bW(?:OMEN'?S|OMENS)?\b/i.test(raw)) return 'womens';
+  if (/\bUS\s*M\b|\bM(?:EN'?S|ENS)?\b|\bUNISEX\b/i.test(raw)) return 'mens_unisex';
+  if (/^(?:US\s*)?\d+(?:\.5)?$/i.test(raw)) return 'mens_unisex';
+  return 'unknown';
+}
+
+function itemBateComTamanhos(item, sizes = {}) {
+  const temMens = Number.isFinite(sizes?.mens);
+  const temWomens = Number.isFinite(sizes?.womens);
+  if (!temMens && !temWomens) return true;
+
+  const sistema = sistemaTamanhoDoItem(item);
+  const tamanhoOriginal = numeroTamanho(item?.tamanho);
+
+  // Regra da aba Compras Pendentes:
+  // - tamanho com W compara contra a linha US WOMENS;
+  // - tamanho com M compara contra a linha US MENS/UNISEX;
+  // - tamanho sem letra, só número, é tratado como Unisex e compara contra MENS/UNISEX.
+  if (sistema === 'womens') return temWomens && tamanhoIgual(tamanhoOriginal, sizes.womens);
+  if (sistema === 'mens_unisex') return temMens && tamanhoIgual(tamanhoOriginal, sizes.mens);
+
+  const tamanhos = tamanhosUsDoItem(item);
+  const mens = numeroTamanho(tamanhos.mens);
+  const womens = numeroTamanho(tamanhos.womens);
+  if (temMens && tamanhoIgual(mens, sizes.mens)) return true;
+  if (temWomens && tamanhoIgual(womens, sizes.womens)) return true;
+  return false;
+}
+
 function linhasProdutoOperador(pedido) {
   const item = itemPrincipalDoPedido(pedido?.id);
   const sku = skuExibicao(item?.sku) || `SKU NÃO CADASTRADA (#${pedido?.numero_pedido || '?'})`;
@@ -572,7 +612,7 @@ function respostaEnviadoOperador(pedidos, loteNome = null) {
   return `ENVIADO ${dataOperadorHoje()}${loteLinha}\n\n${lista}`;
 }
 
-export function buscarPedidoPorReferencia(ref) {
+export function buscarPedidoPorReferencia(ref, options = {}) {
   const limpo = String(ref || '').replace(/^#/, '').trim();
   if (!limpo) return null;
 
@@ -588,7 +628,9 @@ export function buscarPedidoPorReferencia(ref) {
   if (exato) return exato;
 
   // Match por SKU tolerante a hífen/pontuação: "HV8547-601" === "HV8547601".
-  // Usado pelos comandos de WhatsApp quando o operador digita o SKU com ou sem hífen.
+  // Quando a mensagem formatada traz tamanho, a SKU sozinha não basta: o mesmo
+  // modelo pode ter várias compras em tamanhos diferentes. Nesse caso exigimos
+  // que SKU + tamanho batam antes de mover para recebido/enviado.
   const alvoSku = normalizarReferenciaProduto(limpo);
   if (alvoSku.length >= 5) {
     const candidatos = db.prepare(`
@@ -596,11 +638,17 @@ export function buscarPedidoPorReferencia(ref) {
       FROM pedidos p
       JOIN itens i ON i.pedido_id = p.id
       WHERE i.sku IS NOT NULL AND i.sku != '' AND p.excluido_em IS NULL
-      ORDER BY p.criado_em DESC
+      ORDER BY CASE WHEN p.status = 'pendente' THEN 0 ELSE 1 END, p.criado_em DESC
     `).all();
     const porSku = candidatos.find(p => {
-      const itens = db.prepare('SELECT sku FROM itens WHERE pedido_id = ? AND sku IS NOT NULL AND sku != ?').all(p.id, '');
-      return itens.some(i => normalizarReferenciaProduto(i.sku) === alvoSku);
+      const itens = db.prepare(`
+        SELECT sku, tamanho
+        FROM itens
+        WHERE pedido_id = ? AND sku IS NOT NULL AND sku != ''
+      `).all(p.id);
+      const itensComSku = itens.filter(i => normalizarReferenciaProduto(i.sku) === alvoSku);
+      if (!itensComSku.length) return false;
+      return itensComSku.some(i => itemBateComTamanhos(i, options.sizes));
     });
     if (porSku) return porSku;
   }
@@ -633,7 +681,7 @@ export function aplicarAcaoOperador(parsed, operator, operatorMessageId, rawMess
   const actor = { senderIdentifier: operator.identifier, senderName: operator.name, operatorMessageId, rawMessage, confidence: parsed.confidence || 'high' };
 
   if (parsed.intent === 'mark_received') {
-    const pedido = buscarPedidoPorReferencia(parsed.orderRef);
+    const pedido = buscarPedidoPorReferencia(parsed.orderRef, { sizes: parsed.sizes });
     if (!pedido) return { status: 'not_found', reply: `Não encontrei o pedido ${parsed.orderRef}.` };
     const refProduto = referenciaProdutoOperador(pedido);
     if (pedido.status === 'entregue') return { status: 'blocked', reply: `${refProduto} já está entregue.` };
@@ -645,7 +693,7 @@ export function aplicarAcaoOperador(parsed, operator, operatorMessageId, rawMess
   }
 
   if (parsed.intent === 'mark_shipped') {
-    const pedido = buscarPedidoPorReferencia(parsed.orderRef);
+    const pedido = buscarPedidoPorReferencia(parsed.orderRef, { sizes: parsed.sizes });
     if (!pedido) return { status: 'not_found', reply: `Não encontrei o pedido ${parsed.orderRef}.` };
     const refProduto = referenciaProdutoOperador(pedido);
     if (pedido.status === 'entregue') return { status: 'blocked', reply: `${refProduto} já está entregue.` };
@@ -665,7 +713,7 @@ export function aplicarAcaoOperador(parsed, operator, operatorMessageId, rawMess
   }
 
   if (parsed.intent === 'mark_delivered') {
-    const pedido = buscarPedidoPorReferencia(parsed.orderRef);
+    const pedido = buscarPedidoPorReferencia(parsed.orderRef, { sizes: parsed.sizes });
     if (!pedido) return { status: 'not_found', reply: `Não encontrei o pedido ${parsed.orderRef}.` };
     const refProduto = referenciaProdutoOperador(pedido);
     if (pedido.status === 'cancelado') return { status: 'blocked', reply: `${refProduto} está cancelado.` };
@@ -676,7 +724,7 @@ export function aplicarAcaoOperador(parsed, operator, operatorMessageId, rawMess
   }
 
   if (parsed.intent === 'set_tracking') {
-    const pedido = buscarPedidoPorReferencia(parsed.orderRef);
+    const pedido = buscarPedidoPorReferencia(parsed.orderRef, { sizes: parsed.sizes });
     if (!pedido) return { status: 'not_found', reply: `Não encontrei o pedido ${parsed.orderRef}.` };
     const refProduto = referenciaProdutoOperador(pedido);
     db.prepare(`UPDATE pedidos SET tracking_code = ? WHERE id = ?`).run(parsed.tracking, pedido.id);
@@ -685,7 +733,7 @@ export function aplicarAcaoOperador(parsed, operator, operatorMessageId, rawMess
   }
 
   if (parsed.intent === 'add_note' || parsed.intent === 'report_problem') {
-    const pedido = buscarPedidoPorReferencia(parsed.orderRef);
+    const pedido = buscarPedidoPorReferencia(parsed.orderRef, { sizes: parsed.sizes });
     if (!pedido) return { status: 'not_found', reply: `Não encontrei o pedido ${parsed.orderRef}.` };
     const refProduto = referenciaProdutoOperador(pedido);
     const prefix = parsed.intent === 'report_problem' ? '[Problema WhatsApp]' : '[Obs WhatsApp]';
