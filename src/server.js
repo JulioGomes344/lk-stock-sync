@@ -187,6 +187,17 @@ app.get('/', (req, res) => {
   });
 });
 
+// ── WHATSAPP: limpar mensagens da fila de erros ──
+app.post('/whatsapp/erros/excluir', (req, res) => {
+  store.excluirFilaErrosWhatsapp();
+  res.redirect('/?aba=whatsapp');
+});
+
+app.post('/whatsapp/mensagens/:id/excluir', (req, res) => {
+  store.excluirMensagemWhatsapp(req.params.id);
+  res.redirect('/?aba=whatsapp');
+});
+
 // ── CRIAR PEDIDO (manual) ──
 // upload.any() aceita os campos de foto indexados (item_foto_0, item_foto_1...)
 // junto com os campos de texto do formulário
@@ -293,16 +304,26 @@ app.get('/check-atrasos', async (req, res) => {
   res.render('erro', { msg });
 });
 
+function redirectParaAbaDoPedido(req, res, pedidoId) {
+  const pedido = store.getPedidoEnriquecido(pedidoId);
+  const aba = pedido?.status && ['pendente', 'recebido', 'enviado', 'entregue'].includes(pedido.status) ? pedido.status : 'pendente';
+  res.redirect(`/?aba=${aba}`);
+}
+
 // ── TIPO DE ORIGEM: seleção direta (estoque / encomenda; clicar no ativo limpa) ──
 app.post('/pedidos/:id/tipo-origem', (req, res) => {
+  const pedido = store.getPedidoEnriquecido(req.params.id);
+  if (!pedido) return res.status(404).render('erro', { msg: 'Pedido não encontrado.' });
   store.definirTipoOrigem(req.params.id, req.body.tipo);
-  res.redirect(req.get('Referrer') || '/');
+  redirectParaAbaDoPedido(req, res, req.params.id);
 });
 
 // ── REDIRECIONAMENTO DA COMPRA (texto livre, salvo no pedido) ──
 app.post('/pedidos/:id/redirecionar', (req, res) => {
+  const pedido = store.getPedidoEnriquecido(req.params.id);
+  if (!pedido) return res.status(404).render('erro', { msg: 'Pedido não encontrado.' });
   store.salvarRedirecionamento(req.params.id, req.body.redirecionar_para);
-  res.redirect(req.get('Referrer') || '/');
+  redirectParaAbaDoPedido(req, res, req.params.id);
 });
 
 // ── CANCELAMENTO E RECOMPRA ──
