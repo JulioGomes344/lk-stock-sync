@@ -804,3 +804,27 @@ export function listarFilaErrosWhatsapp(limit = 50) {
     LIMIT ?
   `).all(limit);
 }
+
+const STATUS_ERRO_WHATSAPP = ['unauthorized', 'unknown', 'not_found', 'blocked', 'partial', 'error'];
+
+export function excluirMensagemWhatsapp(id) {
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM order_events WHERE operator_message_id = ?').run(id);
+    db.prepare('DELETE FROM operator_messages WHERE id = ?').run(id);
+  });
+  tx();
+}
+
+export function excluirFilaErrosWhatsapp() {
+  const placeholders = STATUS_ERRO_WHATSAPP.map(() => '?').join(',');
+  const ids = db.prepare(`SELECT id FROM operator_messages WHERE status IN (${placeholders})`).all(...STATUS_ERRO_WHATSAPP).map(r => r.id);
+  if (!ids.length) return 0;
+
+  const idPlaceholders = ids.map(() => '?').join(',');
+  const tx = db.transaction(() => {
+    db.prepare(`DELETE FROM order_events WHERE operator_message_id IN (${idPlaceholders})`).run(...ids);
+    db.prepare(`DELETE FROM operator_messages WHERE id IN (${idPlaceholders})`).run(...ids);
+  });
+  tx();
+  return ids.length;
+}
