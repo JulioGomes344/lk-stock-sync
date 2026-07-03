@@ -286,15 +286,21 @@
         </div>
 
         <% if (filaErrosWhatsapp && filaErrosWhatsapp.length) { %>
-          <div class="border-b border-lightgray bg-offwhite">
-            <div class="px-4 md:px-6 py-3 flex items-center justify-between gap-3">
+          <div class="border-b border-lightgray bg-offwhite" x-data="{ aberta: true }">
+            <div class="px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div>
                 <div class="kicker" style="color:#c4463a">Fila de erros</div>
                 <p class="text-medgray text-[10px] mt-1 font-light">Mensagens que não aplicaram ação: revisar comando, autorização, SKU/pedido ou parser.</p>
               </div>
-              <div class="badge-sem sem-vermelho"><%= filaErrosWhatsapp.length %> pendência(s)</div>
+              <div class="flex flex-wrap items-center gap-2 md:justify-end">
+                <div class="badge-sem sem-vermelho"><%= filaErrosWhatsapp.length %> pendência(s)</div>
+                <button type="button" class="quick-action" @click="aberta=!aberta" x-text="aberta ? 'Recolher' : 'Expandir'"></button>
+                <form method="POST" action="/whatsapp/erros/excluir" onsubmit="return confirm('Excluir TODA a fila de erros do WhatsApp?')">
+                  <button class="quick-action quick-action-red">Excluir fila</button>
+                </form>
+              </div>
             </div>
-            <div class="divide-y divide-lightgray">
+            <div class="divide-y divide-lightgray" x-show="aberta" x-cloak>
               <% filaErrosWhatsapp.forEach(h => { %>
                 <div class="px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-center gap-2">
                   <div class="flex-1 min-w-0">
@@ -306,7 +312,12 @@
                     <div class="text-xs font-light break-words">“<%= h.raw_message %>”</div>
                     <% if (h.error_message) { %><div class="text-[10px] mt-1" style="color:#c4463a"><%= h.error_message %></div><% } %>
                   </div>
-                  <div class="text-[10px] text-medgray font-light md:text-right">Ação: corrigir no WhatsApp ou ajustar pedido/SKU no painel</div>
+                  <div class="flex flex-col md:items-end gap-2 md:text-right">
+                    <div class="text-[10px] text-medgray font-light">Ação: corrigir no WhatsApp ou ajustar pedido/SKU no painel</div>
+                    <form method="POST" action="/whatsapp/mensagens/<%= h.id %>/excluir" onsubmit="return confirm('Excluir esta mensagem da fila?')">
+                      <button class="acao-link" style="color:#c4463a;min-height:auto">Excluir</button>
+                    </form>
+                  </div>
                 </div>
               <% }) %>
             </div>
@@ -549,7 +560,7 @@
                 <input type="text" name="redirecionar_para" value="<%= p.redirecionar_para || '' %>"
                        placeholder="Nome de quem vai receber / redirecionar"
                        class="flex-1">
-                <button class="btn btn-out w-full md:w-auto">Salvar</button>
+                <button type="submit" class="btn btn-out w-full md:w-auto">Salvar</button>
               </div>
             </form>
 
@@ -558,12 +569,12 @@
               <div class="flex items-center gap-2">
                 <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
                   <input type="hidden" name="tipo" value="estoque">
-                  <button class="btn w-full md:w-auto <%= p.tipo_origem === 'estoque' ? 'btn-dark' : 'btn-out' %>"
+                  <button type="submit" class="btn w-full md:w-auto <%= p.tipo_origem === 'estoque' ? 'btn-dark' : 'btn-out' %>"
                           <% if (p.tipo_origem === 'estoque') { %>style="background:#3a7d44"<% } %>>Estoque</button>
                 </form>
                 <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
                   <input type="hidden" name="tipo" value="encomenda">
-                  <button class="btn w-full md:w-auto <%= p.tipo_origem === 'encomenda' ? 'btn-dark' : 'btn-out' %>"
+                  <button type="submit" class="btn w-full md:w-auto <%= p.tipo_origem === 'encomenda' ? 'btn-dark' : 'btn-out' %>"
                           <% if (p.tipo_origem === 'encomenda') { %>style="background:#92620a"<% } %>>Encomenda</button>
                 </form>
               </div>
