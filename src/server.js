@@ -8,6 +8,7 @@ import * as store from './store.js';
 import { enviarAlertaAtraso, enviarAvisoPedido, enviarConfirmacaoCompra, destinatariosPadrao } from './email.js';
 import { initDb } from './init-db.js';
 import { sincronizarGmail, gmailConfigurado } from './gmail.js';
+import { exigirLogin, criarSessao, encerrarSessao, senhaCorreta, senhaConfigurada } from './auth.js';
 import { parseOperatorMessage, normalizeText } from './operatorParser.js';
 import { sendWhatsappGroupMessage } from './whatsappProvider.js';
 
@@ -16,7 +17,6 @@ import { sendWhatsappGroupMessage } from './whatsappProvider.js';
 initDb();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export function createComprasApp() {
 const app = express();
 
 // Upload de fotos (as que o vendedor envia). No Railway, aponte para o Volume.
@@ -34,8 +34,16 @@ app.set('views', join(__dirname, '..', 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/static', express.static(join(__dirname, '..', 'public')));
-// Autenticação: herdada do dashboard principal de estoque.
-app.get('/logout', (_req, res) => res.redirect('/logout'));
+// ── AUTENTICAÇÃO: tudo abaixo exige login ──
+app.get('/login', (req, res) => res.render('login', { configurada: senhaConfigurada(), erro: null }));
+app.post('/login', (req, res) => {
+  if (senhaCorreta(req.body.senha)) {
+    criarSessao(res);
+    return res.redirect('/');
+  }
+  res.status(401).render('login', { configurada: senhaConfigurada(), erro: 'Senha incorreta.' });
+});
+app.get('/logout', (req, res) => { encerrarSessao(res); res.redirect('/login'); });
 // Fotos ficam fora do login: nomes são códigos aleatórios não-adivinháveis,
 // e o e-mail de atraso precisa carregar as imagens sem sessão.
 app.use('/uploads', express.static(UPLOAD_DIR));
@@ -140,20 +148,35 @@ app.post('/webhooks/evolution', async (req, res) => {
   }
 });
 
-app.use((req, res, next) => { res.locals.basePath = req.baseUrl || '/compras'; next(); });
+app.use(exigirLogin);
 
 // ── DASHBOARD (3 abas) ──
 app.get('/', (req, res) => {
   const aba = ['pendente', 'recebido', 'enviado', 'entregue', 'prioridade', 'cancelados', 'lotes', 'lixeira', 'whatsapp'].includes(req.query.aba) ? req.query.aba : 'pendente';
+  const filtroRedirecionar = String(req.query.redirecionar_para || '').trim();
+  const filtroTipoOrigem = ['estoque', 'encomenda', 'sem_tipo'].includes(String(req.query.tipo_origem || '')) ? String(req.query.tipo_origem) : '';
+  const manualProduto = String(req.query.manualProduto || '').trim();
+  const pedidosBase = aba === 'lixeira' ? store.listarLixeira()
+           : aba === 'whatsapp' ? []
+           : aba === 'prioridade' ? store.listarPrioridade()
+           : aba === 'cancelados' ? store.listarCancelados()
+           : store.listarPorStatus(aba);
+  const redirecionarOptions = [...new Set(pedidosBase.map(p => String(p.redirecionar_para || '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const pedidosFiltrados = pedidosBase.filter(p => {
+    if (filtroRedirecionar && String(p.redirecionar_para || '').trim() !== filtroRedirecionar) return false;
+    if (filtroTipoOrigem === 'estoque' || filtroTipoOrigem === 'encomenda') return p.tipo_origem === filtroTipoOrigem;
+    if (filtroTipoOrigem === 'sem_tipo') return !p.tipo_origem;
+    return true;
+  });
   res.render('dashboard', {
     aba,
     resumo: store.resumo(),
     resumoSemaforo: store.resumoSemaforo(),
-    pedidos: aba === 'lixeira' ? store.listarLixeira()
-           : aba === 'whatsapp' ? []
-           : aba === 'prioridade' ? store.listarPrioridade()
-           : aba === 'cancelados' ? store.listarCancelados()
-           : store.listarPorStatus(aba),
+    pedidos: pedidosFiltrados,
+    totalPedidosSemFiltro: pedidosBase.length,
+    filtrosCompras: { redirecionar_para: filtroRedirecionar, tipo_origem: filtroTipoOrigem, manualProduto },
+    redirecionarOptions,
     lotes: store.listarLotesComPedidos(),
     lotesLixeira: aba === 'lixeira' ? store.listarLotesLixeira() : [],
     lotesAtivos: store.listarLotesAtivos(),
@@ -182,29 +205,29 @@ app.post('/pedidos', upload.any(), (req, res) => {
     if (!nome?.trim()) return;
     const itemId = store.adicionarItem(pid, { nome, sku: skus[i]?.trim() || null, tamanho: tams[i], qtd: parseInt(qtds[i]) || 1 });
     const foto = (req.files || []).find(f => f.fieldname === `item_foto_${i}`);
-    if (foto) store.anexarFoto(itemId, `${req.baseUrl || '/compras'}/uploads/` + foto.filename);
+    if (foto) store.anexarFoto(itemId, '/uploads/' + foto.filename);
   });
-  res.redirect(`${req.baseUrl || '/compras'}?aba=pendente`);
+  res.redirect('/?aba=pendente');
 });
 
 // ── ANEXAR FOTO a um item ──
 app.post('/itens/:id/foto', upload.single('foto'), (req, res) => {
-  if (req.file) store.anexarFoto(req.params.id, `${req.baseUrl || '/compras'}/uploads/` + req.file.filename);
-  res.redirect(req.get('Referrer') || (req.baseUrl || '/compras'));
+  if (req.file) store.anexarFoto(req.params.id, '/uploads/' + req.file.filename);
+  res.redirect(req.get('Referrer') || '/');
 });
 
 // ── CRIAR LOTE ──
 app.post('/lotes', (req, res) => {
   const { descricao, transportadora, codigo_rastreio, data_envio } = req.body;
   store.criarLote({ descricao, transportadora, codigo_rastreio, data_envio });
-  res.redirect(`${req.baseUrl || '/compras'}?aba=pendente`);
+  res.redirect('/?aba=pendente');
 });
 
 // ── MOVER PEDIDO PARA RECEBIDO ──
 app.post('/pedidos/:id/receber', (req, res) => {
   try {
     store.marcarRecebido(req.params.id);
-    res.redirect(`${req.baseUrl || '/compras'}?aba=recebido`);
+    res.redirect('/?aba=recebido');
   } catch (e) {
     const msgs = {
       PEDIDO_CANCELADO: 'Pedido cancelado não pode ser marcado como recebido.',
@@ -218,7 +241,7 @@ app.post('/pedidos/:id/receber', (req, res) => {
 app.post('/pedidos/:id/enviar', (req, res) => {
   try {
     store.moverParaEnviado(req.params.id, req.body.lote_id);
-    res.redirect(`${req.baseUrl || '/compras'}?aba=enviado`);
+    res.redirect('/?aba=enviado');
   } catch (e) {
     const msgs = {
       FOTO_OBRIGATORIA: 'Anexe ao menos uma foto antes de marcar como enviado.',
@@ -231,13 +254,13 @@ app.post('/pedidos/:id/enviar', (req, res) => {
 // ── ENTREGAR PEDIDO INDIVIDUAL ──
 app.post('/pedidos/:id/entregar', (req, res) => {
   store.marcarEntregue(req.params.id);
-  res.redirect(`${req.baseUrl || '/compras'}?aba=entregue`);
+  res.redirect('/?aba=entregue');
 });
 
 // ── ENTREGAR LOTE INTEIRO ──
 app.post('/lotes/:id/entregar', (req, res) => {
   store.entregarLote(req.params.id);
-  res.redirect(`${req.baseUrl || '/compras'}?aba=entregue`);
+  res.redirect('/?aba=entregue');
 });
 
 // ── SINCRONIZAÇÃO MANUAL DO GMAIL ──
@@ -273,24 +296,24 @@ app.get('/check-atrasos', async (req, res) => {
 // ── TIPO DE ORIGEM: seleção direta (estoque / encomenda; clicar no ativo limpa) ──
 app.post('/pedidos/:id/tipo-origem', (req, res) => {
   store.definirTipoOrigem(req.params.id, req.body.tipo);
-  res.redirect(req.get('Referrer') || (req.baseUrl || '/compras'));
+  res.redirect(req.get('Referrer') || '/');
 });
 
 // ── REDIRECIONAMENTO DA COMPRA (texto livre, salvo no pedido) ──
 app.post('/pedidos/:id/redirecionar', (req, res) => {
   store.salvarRedirecionamento(req.params.id, req.body.redirecionar_para);
-  res.redirect(req.get('Referrer') || (req.baseUrl || '/compras'));
+  res.redirect(req.get('Referrer') || '/');
 });
 
 // ── CANCELAMENTO E RECOMPRA ──
 app.post('/pedidos/:id/cancelar', (req, res) => {
   store.marcarCancelado(req.params.id);
-  res.redirect(`${req.baseUrl || '/compras'}?aba=cancelados`);
+  res.redirect('/?aba=cancelados');
 });
 
 app.post('/pedidos/:id/recompra', (req, res) => {
   store.confirmarRecompra(req.params.id);
-  res.redirect(`${req.baseUrl || '/compras'}?aba=pendente`);
+  res.redirect('/?aba=pendente');
 });
 
 // ── CONFIRMAÇÃO DE COMPRA (botão, destinatário escolhível) ──
@@ -317,12 +340,12 @@ app.post('/pedidos/:id/confirmar-compra', async (req, res) => {
 // ── LIXEIRA DE LOTES ──
 app.post('/lotes/:id/excluir', (req, res) => {
   store.moverLoteParaLixeira(req.params.id);
-  res.redirect(`${req.baseUrl || '/compras'}?aba=lixeira`);
+  res.redirect('/?aba=lixeira');
 });
 
 app.post('/lotes/:id/restaurar', (req, res) => {
   store.restaurarLoteDaLixeira(req.params.id);
-  res.redirect(`${req.baseUrl || '/compras'}?aba=lotes`);
+  res.redirect('/?aba=lotes');
 });
 
 app.post('/lotes/:id/excluir-definitivo', (req, res) => {
@@ -334,7 +357,7 @@ app.post('/lotes/:id/excluir-definitivo', (req, res) => {
     return res.status(403).render('erro', { msg: 'Senha incorreta. O lote permanece na lixeira.' });
   }
   store.excluirLoteDefinitivo(req.params.id);
-  res.redirect(`${req.baseUrl || '/compras'}?aba=lixeira`);
+  res.redirect('/?aba=lixeira');
 });
 
 // ── AVISO INDIVIDUAL POR PEDIDO: atraso ou prioridade de envio ──
@@ -367,12 +390,12 @@ app.post('/pedidos/:id/avisar', async (req, res) => {
 
 app.post('/pedidos/:id/excluir', (req, res) => {
   store.moverParaLixeira(req.params.id);
-  res.redirect(`${req.baseUrl || '/compras'}?aba=lixeira`);
+  res.redirect('/?aba=lixeira');
 });
 
 app.post('/pedidos/:id/restaurar', (req, res) => {
   store.restaurarDaLixeira(req.params.id);
-  res.redirect(`${req.baseUrl || '/compras'}?aba=lixeira`);
+  res.redirect('/?aba=lixeira');
 });
 
 app.post('/pedidos/:id/excluir-definitivo', (req, res) => {
@@ -388,10 +411,10 @@ app.post('/pedidos/:id/excluir-definitivo', (req, res) => {
   const fotos = store.excluirDefinitivo(req.params.id);
   // apaga também os arquivos de foto locais do pedido
   for (const f of fotos) {
-    const caminho = join(UPLOAD_DIR, f.replace(/^\/compras\/uploads\//, '').replace('/uploads/', ''));
+    const caminho = join(UPLOAD_DIR, f.replace('/uploads/', ''));
     fs.unlink(caminho, () => {}); // ignora se já não existir
   }
-  res.redirect(`${req.baseUrl || '/compras'}?aba=lixeira`);
+  res.redirect('/?aba=lixeira');
 });
 
 // ── BACKUP: baixa o arquivo do banco (protegido pelo login) ──
@@ -417,7 +440,40 @@ app.post('/zerar', (req, res) => {
   res.render('erro', { msg: 'Histórico zerado com sucesso. O painel está limpo e pronto para recomeçar a partir de agora.' });
 });
 
-return app;
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`✓ LK Compras rodando em http://localhost:${PORT}`));
+
+// ── CRON INTERNO: verificação automática de atrasos ──
+// Roda no boot e depois a cada 1 hora. Seguro contra spam: cada pedido só é
+// avisado uma vez (aviso_atraso_em), então as checagens repetidas não reenviam.
+// Sem necessidade de serviço cron separado nem Volume compartilhado no Railway.
+const UMA_HORA = 60 * 60 * 1000;
+
+async function verificarAtrasosAutomatico() {
+  try {
+    const atrasados = store.pedidosAtrasadosNaoAvisados();
+    if (!atrasados.length) return;
+    const r = await enviarAlertaAtraso(atrasados);
+    if (r.enviado || r.dryRun) {
+      atrasados.forEach(p => store.marcarAvisoEnviado(p.id));
+      console.log(`✓ [cron] ${atrasados.length} pedido(s) atrasado(s) avisado(s) por e-mail.`);
+    } else {
+      console.error(`✗ [cron] envio falhou (${r.erro}) — tentará de novo na próxima hora.`);
+    }
+  } catch (e) {
+    console.error('✗ [cron] erro na verificação de atrasos:', e.message);
+  }
 }
 
-export default createComprasApp;
+setTimeout(verificarAtrasosAutomatico, 30 * 1000); // 30s após o boot
+setInterval(verificarAtrasosAutomatico, UMA_HORA);  // depois, a cada hora
+
+// ── CRON INTERNO: sincronização do Gmail a cada 30 min ──
+const MEIA_HORA = 30 * 60 * 1000;
+async function sincronizarGmailAutomatico() {
+  if (!gmailConfigurado()) return; // sem credenciais, fica em silêncio
+  const r = await sincronizarGmail();
+  if (r.ok && r.criados > 0) console.log(`✓ [cron-gmail] ${r.criados} pedido(s) novo(s) importado(s).`);
+}
+setTimeout(sincronizarGmailAutomatico, 60 * 1000);  // 1min após o boot
+setInterval(sincronizarGmailAutomatico, MEIA_HORA);
