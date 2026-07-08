@@ -229,7 +229,8 @@ app.post('/itens/:id/foto', upload.single('foto'), (req, res) => {
 
 // ── CRIAR LOTE ──
 app.post('/lotes', (req, res) => {
-  const { descricao, transportadora, codigo_rastreio, data_envio } = req.body;
+  const { transportadora, codigo_rastreio, data_envio } = req.body;
+  const descricao = (req.body.descricao || req.body.nome || req.body.nome_lote || req.body.lote || '').trim();
   store.criarLote({ descricao, transportadora, codigo_rastreio, data_envio });
   res.redirect('/?aba=pendente');
 });
