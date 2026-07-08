@@ -170,6 +170,10 @@ function migrar() {
       foto_recebida_em: 'TEXT'
     },
     lotes: {
+      descricao: 'TEXT',
+      transportadora: 'TEXT',
+      data_envio: 'TEXT',
+      status: "TEXT NOT NULL DEFAULT 'em_transito'",
       codigo_rastreio: 'TEXT',
       excluido_em: 'TEXT'
     }
