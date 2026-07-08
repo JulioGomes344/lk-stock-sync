@@ -741,13 +741,19 @@
         <div class="space-y-4 mb-10">
         <% ativos.forEach(l => { %>
           <% const valorTotal = l.pedidos.reduce((s,p) => s + (p.valor || 0), 0) %>
-          <div class="bg-white border border-lightgray">
+          <div class="bg-white border border-lightgray" x-data="{ renomeando: false }">
             <div class="p-4 md:p-5 border-b border-lightgray flex flex-col md:flex-row md:items-center gap-3">
               <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-3 flex-wrap">
+                <div class="flex items-center gap-3 flex-wrap" x-show="!renomeando">
                   <span class="font-display text-xl font-light"><%= l.descricao || l.id %></span>
                   <span class="badge-sem sem-amarelo">Em trânsito</span>
+                  <button type="button" class="acao-link" style="color:#0a0a0a" @click="renomeando=true">Renomear</button>
                 </div>
+                <form method="POST" action="/lotes/<%= l.id %>/renomear" class="flex items-center gap-2 flex-wrap" x-show="renomeando" x-cloak>
+                  <input name="descricao" value="<%= l.descricao || '' %>" placeholder="Nome do lote" required class="!w-56 !py-1">
+                  <button class="btn btn-dark !py-1 !px-3">Salvar</button>
+                  <button type="button" class="acao-link" @click="renomeando=false">Cancelar</button>
+                </form>
                 <div class="text-medgray text-xs mt-1 font-light">
                   <%= l.transportadora || 'sem transportadora' %>
                   <% if (l.codigo_rastreio) { %> · rastreio: <%= l.codigo_rastreio %><% } %>
@@ -793,13 +799,19 @@
         <div class="kicker mb-2">Histórico · Entregues · <%= entregues.length %></div>
         <div class="space-y-px bg-lightgray border border-lightgray">
         <% entregues.forEach(l => { %>
-          <div class="bg-white p-4 md:p-5" x-data="{ aberto:false }">
+          <div class="bg-white p-4 md:p-5" x-data="{ aberto:false, renomeando:false }">
             <div class="flex items-center gap-3">
               <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-3 flex-wrap">
+                <div class="flex items-center gap-3 flex-wrap" x-show="!renomeando">
                   <span class="font-display text-lg font-light"><%= l.descricao || l.id %></span>
                   <span class="badge-sem sem-verde">Entregue</span>
+                  <button type="button" class="acao-link" style="color:#0a0a0a" @click="renomeando=true">Renomear</button>
                 </div>
+                <form method="POST" action="/lotes/<%= l.id %>/renomear" class="flex items-center gap-2 flex-wrap" x-show="renomeando" x-cloak>
+                  <input name="descricao" value="<%= l.descricao || '' %>" placeholder="Nome do lote" required class="!w-56 !py-1">
+                  <button class="btn btn-dark !py-1 !px-3">Salvar</button>
+                  <button type="button" class="acao-link" @click="renomeando=false">Cancelar</button>
+                </form>
                 <div class="text-medgray text-xs mt-1 font-light">
                   <%= l.transportadora || '—' %> · <%= l.pedidos.length %> pedido(s)
                 </div>
