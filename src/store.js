@@ -159,6 +159,12 @@ export function criarLote({ descricao, transportadora, codigo_rastreio, data_env
   return id;
 }
 
+export function renomearLote(lote_id, descricao) {
+  const limpa = String(descricao || '').trim();
+  if (!limpa) throw new Error('NOME_OBRIGATORIO');
+  db.prepare('UPDATE lotes SET descricao = ? WHERE id = ?').run(limpa, lote_id);
+}
+
 export function listarLotesAtivos() {
   return db.prepare(`SELECT * FROM lotes WHERE status = 'em_transito' AND excluido_em IS NULL ORDER BY criado_em DESC`).all();
 }
