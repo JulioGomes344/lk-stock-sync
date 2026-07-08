@@ -151,10 +151,11 @@ export function moverParaEnviado(pedido_id, lote_id) {
 
 export function criarLote({ descricao, transportadora, codigo_rastreio, data_envio }) {
   const id = nanoid(8);
+  const descricaoLimpa = String(descricao || '').trim() || null;
   db.prepare(`
     INSERT INTO lotes (id, descricao, transportadora, codigo_rastreio, data_envio)
     VALUES (?, ?, ?, ?, ?)
-  `).run(id, descricao || null, transportadora || null, codigo_rastreio || null, data_envio || new Date().toISOString().slice(0, 10));
+  `).run(id, descricaoLimpa, transportadora || null, codigo_rastreio || null, data_envio || new Date().toISOString().slice(0, 10));
   return id;
 }
 
