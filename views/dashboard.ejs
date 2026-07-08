@@ -209,7 +209,7 @@
           <button type="button" class="acao-link text-medgray text-lg" style="letter-spacing:0" @click="modal=null">×</button>
         </div>
         <form method="POST" action="/lotes" class="mt-5">
-          <div class="mb-4"><label>Descrição</label><input name="descricao" placeholder="Ex: Envio EUA — Julho/01"></div>
+          <div class="mb-4"><label>Nome do lote</label><input name="descricao" placeholder="Ex: Envio EUA — Julho/01" required></div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div><label>Transportadora</label><input name="transportadora" placeholder="DHL, FedEx..."></div>
             <div><label>Cód. Rastreio</label><input name="codigo_rastreio"></div>
