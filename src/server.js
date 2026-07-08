@@ -229,10 +229,31 @@ app.post('/itens/:id/foto', upload.single('foto'), (req, res) => {
 
 // ── CRIAR LOTE ──
 app.post('/lotes', (req, res) => {
-  const { transportadora, codigo_rastreio, data_envio } = req.body;
-  const descricao = (req.body.descricao || req.body.nome || req.body.nome_lote || req.body.lote || '').trim();
-  store.criarLote({ descricao, transportadora, codigo_rastreio, data_envio });
-  res.redirect('/?aba=pendente');
+  try {
+    const { transportadora, codigo_rastreio, data_envio } = req.body;
+    const descricao = (req.body.descricao || req.body.nome || req.body.nome_lote || req.body.lote || '').trim();
+    if (!descricao) {
+      // Diagnóstico: se cair aqui, o formulário enviou o nome com outro campo.
+      console.warn('POST /lotes sem descricao. Body recebido:', JSON.stringify(req.body));
+      return res.status(400).render('erro', { msg: 'O nome do lote não chegou ao servidor. Nada foi criado — tente novamente e, se persistir, verifique o deploy (formulário e servidor em versões diferentes).' });
+    }
+    store.criarLote({ descricao, transportadora, codigo_rastreio, data_envio });
+    res.redirect('/?aba=lotes');
+  } catch (e) {
+    console.error('Erro ao criar lote:', e);
+    res.status(500).render('erro', { msg: 'Erro ao criar o lote: ' + e.message });
+  }
+});
+
+// ── RENOMEAR LOTE ──
+app.post('/lotes/:id/renomear', (req, res) => {
+  try {
+    store.renomearLote(req.params.id, req.body.descricao);
+    res.redirect('/?aba=lotes');
+  } catch (e) {
+    const msg = e.message === 'NOME_OBRIGATORIO' ? 'Digite um nome para o lote.' : 'Erro ao renomear: ' + e.message;
+    res.status(400).render('erro', { msg });
+  }
 });
 
 // ── MOVER PEDIDO PARA RECEBIDO ──
