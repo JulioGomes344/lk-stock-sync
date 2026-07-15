@@ -173,11 +173,11 @@ export function resumo() {
   for (const s of ['pendente', 'enviado', 'entregue', 'cancelado']) {
     r[s] = db.prepare('SELECT COUNT(*) c FROM pedidos WHERE status = ? AND excluido_em IS NULL').get(s).c;
   }
-  // prioridade: pedidos com e-mail de prioridade enviado, ainda não chegados/cancelados
+  // prioridade: pedidos priorizados que ainda aguardam envio (mesma regra da aba)
   r.prioridade = db.prepare(`
     SELECT COUNT(*) c FROM pedidos
     WHERE prioridade_enviada_em IS NOT NULL
-      AND status NOT IN ('entregue','cancelado') AND excluido_em IS NULL
+      AND status = 'pendente' AND excluido_em IS NULL
   `).get().c;
   return r;
 }
@@ -322,12 +322,13 @@ export function marcarPrioridadeEnviada(pedido_id) {
 }
 
 // ── PRIORIDADE ──
-// Agrupa pedidos com e-mail de prioridade enviado, que ainda não chegaram.
+// Só pedidos que AINDA aguardam envio: assim que são enviados, saem desta aba
+// (mas mantêm o selo de prioridade no card, visível em qualquer aba).
 export function listarPrioridade() {
   const rows = db.prepare(`
     SELECT * FROM pedidos
     WHERE prioridade_enviada_em IS NOT NULL
-      AND status NOT IN ('entregue','cancelado')
+      AND status = 'pendente'
       AND excluido_em IS NULL
     ORDER BY prioridade_enviada_em DESC
   `).all();
