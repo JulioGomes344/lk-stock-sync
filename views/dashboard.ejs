@@ -44,6 +44,14 @@
     .thumb{width:56px;height:56px;object-fit:contain;background:#fff;border:1px solid #e8e6e2;flex-shrink:0;padding:3px}
     @media (min-width:768px){ .thumb{width:64px;height:64px} }
     [x-cloak]{display:none!important}
+    .quick-action{font-size:8px;letter-spacing:2px;text-transform:uppercase;padding:8px 10px;border:1px solid #e8e6e2;background:#fff;min-height:34px;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+    .quick-action-dark{background:#0a0a0a;color:#fff;border-color:#0a0a0a}
+    .quick-action-green{border-color:#3a7d44;color:#3a7d44}
+    .quick-action-red{border-color:#c4463a;color:#c4463a}
+    .compact-card .thumb{width:42px;height:42px}
+    .compact-card{padding:12px!important}
+    .compact-card .compact-hide{display:none!important}
+    .compact-card .compact-title{font-size:15px!important}
   </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -60,8 +68,8 @@
     </div>
   </header>
 
-  <main class="w-full max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 flex-1" x-data="{ modal:null, busca:'', filtroSem:'' }">
-    <% const labels = {pendente:'Pendente', enviado:'Enviado', entregue:'Entregue', prioridade:'Prioridade', cancelados:'Cancelados', lotes:'Lotes', lixeira:'Lixeira'} %>
+  <main class="w-full max-w-6xl mx-auto px-4 md:px-8 py-8 md:py-12 flex-1" x-data="comprasDashboard(<%= filtrosCompras.manualProduto ? '\'pedido\'' : 'null' %>)" x-init="init()">
+    <% const labels = {pendente:'Pendente', recebido:'Recebido', enviado:'Enviado', entregue:'Entregue', prioridade:'Prioridade', cancelados:'Cancelados', lotes:'Lotes', lixeira:'Lixeira', whatsapp:'WhatsApp'} %>
 
     <!-- TÍTULO DA PÁGINA -->
     <div class="mb-8 md:mb-10">
@@ -73,6 +81,7 @@
     <!-- KPIs (aba ativa destacada) -->
     <% const kpis = [
          { aba:'pendente',   label:'Pendente',  valor: resumo.pendente },
+         { aba:'recebido',   label:'Recebido',  valor: resumo.recebido },
          { aba:'enviado',    label:'Enviado',   valor: resumo.enviado },
          { aba:'entregue',   label:'Entregue',  valor: resumo.entregue },
          { aba:'prioridade', label:'Prioridade',valor: resumo.prioridade },
@@ -156,6 +165,7 @@
                      :required="lojaSel==='__nova__'">
             </div>
             <div><label>Data da Compra</label><input name="data_compra" placeholder="Ex: 09/06/2026 ou hoje"></div>
+            <div><label>Ordem de Compra</label><input name="pedido_loja" placeholder="Ex: 03-EBHH99EL1N ou 377805419"></div>
             <div><label>Valor</label><input type="number" step="0.01" inputmode="decimal" name="valor" placeholder="0.00"></div>
             <div><label>Moeda</label><select name="moeda"><option>USD</option><option>EUR</option><option>BRL</option></select></div>
           </div>
@@ -165,10 +175,11 @@
           <template x-for="(item,i) in itens" :key="i">
             <div class="mb-4 pb-4 border-b border-lightgray md:border-0 md:pb-0 md:mb-3">
               <div class="grid grid-cols-12 gap-2">
-                <input class="col-span-12 md:col-span-7" name="item_nome" placeholder="Nome do produto">
-                <input class="col-span-5 md:col-span-2" name="item_tamanho" placeholder="Tam.">
-                <input class="col-span-4 md:col-span-2" type="number" inputmode="numeric" name="item_qtd" value="1" min="1">
-                <button type="button" class="col-span-3 md:col-span-1 text-redsub text-xl min-h-[44px]" @click="itens.splice(i,1)" x-show="itens.length>1">×</button>
+                <input class="col-span-12 md:col-span-5" name="item_nome" placeholder="Nome do produto" value="<%= filtrosCompras.manualProduto || '' %>">
+                <input class="col-span-5 md:col-span-3" name="item_sku" placeholder="SKU / Style ID">
+                <input class="col-span-4 md:col-span-2" name="item_tamanho" placeholder="Tam.">
+                <input class="col-span-2 md:col-span-1" type="number" inputmode="numeric" name="item_qtd" value="1" min="1">
+                <button type="button" class="col-span-1 md:col-span-1 text-redsub text-xl min-h-[44px]" @click="itens.splice(i,1)" x-show="itens.length>1">×</button>
               </div>
               <div class="mt-2 flex items-center gap-2">
                 <span class="text-[8px] tracking-wider uppercase text-medgray flex-shrink-0">Foto (opcional)</span>
@@ -198,7 +209,7 @@
           <button type="button" class="acao-link text-medgray text-lg" style="letter-spacing:0" @click="modal=null">×</button>
         </div>
         <form method="POST" action="/lotes" class="mt-5">
-          <div class="mb-4"><label>Descrição</label><input name="descricao" placeholder="Ex: Envio EUA — Julho/01"></div>
+          <div class="mb-4"><label>Nome do lote</label><input name="descricao" placeholder="Ex: Envio EUA — Julho/01" required></div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div><label>Transportadora</label><input name="transportadora" placeholder="DHL, FedEx..."></div>
             <div><label>Cód. Rastreio</label><input name="codigo_rastreio"></div>
@@ -212,24 +223,190 @@
       </div>
     </div>
 
-    <!-- TABS (roláveis no mobile) + BUSCA -->
+    <!-- FILTROS FORTES / ESTADO DA TELA -->
+    <% if (aba !== 'lotes' && aba !== 'whatsapp') { %>
+      <div class="border border-lightgray bg-white mb-5">
+        <div class="px-4 md:px-6 py-3 border-b border-lightgray flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div>
+            <div class="kicker">Filtros rápidos</div>
+            <p class="text-medgray text-[10px] mt-1 font-light">Busca por SKU, pedido, ordem de compra, produto, loja e tamanho. Estado fica salvo ao navegar.</p>
+          </div>
+          <button type="button" class="acao-link" style="color:#0a0a0a" @click="clearFilters()">Limpar filtros</button>
+        </div>
+        <div class="p-4 md:p-5 grid grid-cols-1 md:grid-cols-12 gap-3 md:items-end">
+          <div class="md:col-span-5">
+            <label>Busca inteligente</label>
+            <input type="search" x-model.debounce.200ms="busca" placeholder="SKU, pedido, OC, produto, loja ou tamanho..." class="!bg-white">
+          </div>
+          <div class="md:col-span-3">
+            <label>Origem</label>
+            <select x-model="tipoOrigem">
+              <option value="">Todas</option>
+              <option value="estoque">Estoque</option>
+              <option value="encomenda">Encomenda</option>
+              <option value="sem_origem">Sem origem definida</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label>Prazo</label>
+            <select x-model="filtroSem">
+              <option value="">Todos</option>
+              <option value="verde">No prazo</option>
+              <option value="amarelo">A expirar</option>
+              <option value="vermelho">Atrasado</option>
+            </select>
+          </div>
+          <div class="md:col-span-2 flex items-center gap-2">
+            <button type="button" class="btn btn-out w-full" :class="modoCompacto ? 'btn-dark' : ''" @click="modoCompacto=!modoCompacto; persist()">Modo compacto</button>
+          </div>
+        </div>
+      </div>
+    <% } %>
+
+    <!-- TABS (roláveis no mobile) -->
     <div class="flex items-center gap-4 md:gap-8 border-b border-lightgray mb-5 overflow-x-auto" style="scrollbar-width:none">
-      <% for (const k of ['pendente','enviado','entregue']) { %>
+      <% for (const k of ['pendente','recebido','enviado','entregue']) { %>
         <a href="/?aba=<%= k %>" class="tab <%= aba===k?'active':'' %>"><%= labels[k] %></a>
       <% } %>
       <a href="/?aba=prioridade" class="tab <%= aba==='prioridade'?'active':'' %>">Prioridade</a>
       <a href="/?aba=cancelados" class="tab <%= aba==='cancelados'?'active':'' %>">Cancelados</a>
       <a href="/?aba=lotes" class="tab <%= aba==='lotes'?'active':'' %>">Lotes</a>
+      <a href="/?aba=whatsapp" class="tab <%= aba==='whatsapp'?'active':'' %>">WhatsApp</a>
       <a href="/?aba=lixeira" class="tab <%= aba==='lixeira'?'active':'' %>" style="margin-left:auto;<%= aba==='lixeira'?'':'color:#b5b0a8' %>">Lixeira</a>
     </div>
 
-    <% if (aba !== 'lotes') { %>
-    <div class="mb-5">
-      <input type="search" x-model="busca" placeholder="Buscar por produto, loja ou número..."
-             class="!bg-white" style="max-width:420px">
-    </div>
+    <% if (aba === 'whatsapp') { %>
+      <div class="border border-lightgray bg-white">
+        <div class="px-4 md:px-6 py-4 border-b border-lightgray flex items-center justify-between gap-3">
+          <div>
+            <div class="kicker mb-1">Histórico WhatsApp</div>
+            <p class="text-medgray text-xs font-light">Últimas mensagens recebidas pelo webhook e ações aplicadas no painel.</p>
+          </div>
+          <div class="text-medgray text-[10px] font-light"><%= historicoWhatsapp.length %> registro(s)</div>
+        </div>
 
-    <!-- LISTA DE PEDIDOS -->
+        <% if (filaErrosWhatsapp && filaErrosWhatsapp.length) { %>
+          <div class="border-b border-lightgray bg-offwhite" x-data="{ aberta: true }">
+            <div class="px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <div class="kicker" style="color:#c4463a">Fila de erros</div>
+                <p class="text-medgray text-[10px] mt-1 font-light">Mensagens que não aplicaram ação: revisar comando, autorização, SKU/pedido ou parser.</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 md:justify-end">
+                <div class="badge-sem sem-vermelho"><%= filaErrosWhatsapp.length %> pendência(s)</div>
+                <button type="button" class="quick-action" @click="aberta=!aberta" x-text="aberta ? 'Recolher' : 'Expandir'"></button>
+                <form method="POST" action="/whatsapp/erros/excluir" onsubmit="return confirm('Excluir TODA a fila de erros do WhatsApp?')">
+                  <button class="quick-action quick-action-red">Excluir fila</button>
+                </form>
+              </div>
+            </div>
+            <div class="divide-y divide-lightgray" x-show="aberta" x-cloak>
+              <% filaErrosWhatsapp.forEach(h => { %>
+                <div class="px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-center gap-2">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex flex-wrap items-center gap-2 mb-1">
+                      <span class="badge-sem sem-vermelho"><%= h.status %></span>
+                      <% if (h.sender_name) { %><span class="text-[10px] text-medgray"><%= h.sender_name %></span><% } %>
+                      <span class="text-[10px] text-medgray"><%= (h.created_at || '').slice(0,16) %></span>
+                    </div>
+                    <div class="text-xs font-light break-words">“<%= h.raw_message %>”</div>
+                    <% if (h.error_message) { %><div class="text-[10px] mt-1" style="color:#c4463a"><%= h.error_message %></div><% } %>
+                  </div>
+                  <div class="flex flex-col md:items-end gap-2 md:text-right">
+                    <div class="text-[10px] text-medgray font-light">Ação: corrigir no WhatsApp ou ajustar pedido/SKU no painel</div>
+                    <form method="POST" action="/whatsapp/mensagens/<%= h.id %>/excluir" onsubmit="return confirm('Excluir esta mensagem da fila?')">
+                      <button class="acao-link" style="color:#c4463a;min-height:auto">Excluir</button>
+                    </form>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
+
+        <% if (!historicoWhatsapp.length) { %>
+          <div class="py-16 md:py-20 text-center">
+            <div class="kicker mb-2">WhatsApp</div>
+            <p class="font-display text-xl font-light text-medgray">Nenhuma mensagem recebida ainda.</p>
+          </div>
+        <% } else { %>
+          <div class="divide-y divide-lightgray">
+            <% historicoWhatsapp.forEach(h => { %>
+              <% let parsed = null; try { parsed = h.parser_result_json ? JSON.parse(h.parser_result_json) : null } catch(e) {} %>
+              <div class="p-4 md:p-5">
+                <div class="flex flex-col md:flex-row md:items-start gap-3">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex flex-wrap items-center gap-2 mb-2">
+                      <span class="badge-auto"><%= h.status %></span>
+                      <% if (h.numero_pedido) { %><span class="badge-status">#<%= h.numero_pedido %></span><% } %>
+                      <% if (h.event_type) { %><span class="text-[9px] tracking-wider uppercase text-medgray"><%= h.event_type %></span><% } %>
+                    </div>
+                    <div class="text-sm font-light break-words">“<%= h.raw_message %>”</div>
+                    <div class="text-medgray text-xs mt-2 font-light">
+                      <%= h.sender_name || 'Operador' %>
+                      <% if (h.sender_identifier) { %> · <%= h.sender_identifier %><% } %>
+                      · <%= (h.created_at || '').slice(0,16) %>
+                    </div>
+                    <% if (parsed && parsed.intent) { %>
+                      <div class="text-medgray text-[10px] mt-2 font-light">
+                        Interpretação: <%= parsed.intent %><% if (parsed.orderRef) { %> · pedido <%= parsed.orderRef %><% } %><% if (parsed.batch) { %> · lote <%= parsed.batch %><% } %><% if (parsed.tracking) { %> · tracking <%= parsed.tracking %><% } %>
+                      </div>
+                    <% } %>
+                    <% if (h.error_message) { %>
+                      <div class="text-[10px] mt-2" style="color:#c4463a">Erro: <%= h.error_message %></div>
+                    <% } %>
+                    <% const msgBuscaManual = String((h.status || '') + ' ' + (h.error_message || '') + ' ' + (h.raw_message || '')).toLowerCase(); %>
+                    <% const produtoNaoEncontrado = /not[_ -]?found|não encontrado|nao encontrado|pedido não encontrado|produto não encontrado|sku não cadastrada|sku nao cadastrada/.test(msgBuscaManual); %>
+                    <% if (produtoNaoEncontrado) { %>
+                      <% const produtoManual = String(h.raw_message || h.error_message || '').replace(/^(recebido|enviado|entregue|tracking|problema|obs|lote)\b/i, '').trim() || String(h.raw_message || h.error_message || 'Produto não encontrado'); %>
+                      <a class="btn btn-dark mt-3" href="/?aba=pendente&manualProduto=<%= encodeURIComponent(produtoManual) %>">Registrar manual</a>
+                    <% } %>
+                  </div>
+                  <div class="md:text-right text-xs text-medgray font-light min-w-[180px]">
+                    <% if (h.old_status || h.new_status) { %>
+                      <div>Status: <%= h.old_status || '—' %> → <%= h.new_status || '—' %></div>
+                    <% } %>
+                    <% if (h.old_value || h.new_value) { %>
+                      <div>Valor: <%= h.old_value || '—' %> → <%= h.new_value || '—' %></div>
+                    <% } %>
+                    <% if (h.loja) { %><div>Loja: <%= h.loja %></div><% } %>
+                  </div>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+    <% } else if (aba !== 'lotes') { %>
+    <div class="mb-5 grid gap-3">
+      <form method="GET" action="/" class="grid grid-cols-1 md:grid-cols-3 gap-3 border border-lightgray bg-white p-3">
+        <input type="hidden" name="aba" value="<%= aba %>">
+        <div>
+          <label>Redirecionar compra para</label>
+          <select name="redirecionar_para" onchange="this.form.requestSubmit()">
+            <option value="">Todos</option>
+            <% redirecionarOptions.forEach(opt => { %>
+              <option value="<%= opt %>" <%= filtrosCompras.redirecionar_para === opt ? 'selected' : '' %>><%= opt %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div>
+          <label>Estoque / Encomenda</label>
+          <select name="tipo_origem" onchange="this.form.requestSubmit()">
+            <option value="" <%= !filtrosCompras.tipo_origem ? 'selected' : '' %>>Todos</option>
+            <option value="estoque" <%= filtrosCompras.tipo_origem === 'estoque' ? 'selected' : '' %>>Estoque</option>
+            <option value="encomenda" <%= filtrosCompras.tipo_origem === 'encomenda' ? 'selected' : '' %>>Encomenda</option>
+            <option value="sem_tipo" <%= filtrosCompras.tipo_origem === 'sem_tipo' ? 'selected' : '' %>>Sem Estoque/Encomenda</option>
+          </select>
+        </div>
+        <div class="flex items-end gap-3">
+          <a href="/?aba=<%= aba %>" class="btn btn-out w-full">Limpar filtros</a>
+        </div>
+        <div class="md:col-span-3 text-medgray text-[10px] font-light">
+          Exibindo <%= pedidos.length %> de <%= totalPedidosSemFiltro %> pedido(s) nesta aba.
+        </div>
+      </form>
+
     <% if (pedidos.length === 0) { %>
       <div class="py-16 md:py-20 text-center border border-lightgray bg-white">
         <div class="kicker mb-2"><%= aba==='lixeira' ? 'Lixeira' : labels[aba] || aba %></div>
@@ -239,11 +416,11 @@
 
     <div class="space-y-px bg-lightgray border border-lightgray <%= pedidos.length===0 ? 'hidden' : '' %>">
     <% pedidos.forEach(p => { %>
-      <% const q = (p.loja + ' ' + (p.numero_pedido||'') + ' ' + (p.pedido_loja||'') + ' ' + p.itens.map(i=>i.nome).join(' ')).toLowerCase() %>
+      <% const q = (p.loja + ' ' + (p.numero_pedido||'') + ' ' + (p.pedido_loja||'') + ' ' + (p.tracking_code||'') + ' ' + (p.redirecionar_para||'') + ' ' + p.itens.map(i=>[i.nome, i.sku, i.tamanho].filter(Boolean).join(' ')).join(' ')).toLowerCase() %>
       <% const fotoCapa = (p.itens.find(i => i.foto_url) || {}).foto_url %>
-      <div class="bg-white p-4 md:p-6 card-sem sem-<%= p.semaforo.cor %>" x-data="{ open:false }"
-           data-q="<%= q %>" data-sem="<%= p.semaforo.cor %>"
-           x-show="(busca.trim()==='' || $el.dataset.q.includes(busca.trim().toLowerCase())) && (filtroSem==='' || $el.dataset.sem===filtroSem)">
+      <div class="bg-white p-4 md:p-6 card-sem sem-<%= p.semaforo.cor %>" x-data="{ open:false }" :class="modoCompacto ? 'compact-card' : ''"
+           data-q="<%= q %>" data-sem="<%= p.semaforo.cor %>" data-origem="<%= p.tipo_origem || 'sem_origem' %>"
+           x-show="matches($el)">
         <div class="flex items-start gap-3 md:gap-4 cursor-pointer" @click="open=!open">
 
           <!-- MINIATURA DO PRODUTO -->
@@ -257,6 +434,7 @@
             <div class="flex items-center gap-2 md:gap-3 flex-wrap">
               <span class="kicker"><%= p.loja %></span>
               <% if (p.numero_pedido) { %><span class="text-medgray text-xs">#<%= p.numero_pedido %></span><% } %>
+              <% if (p.pedido_loja) { %><span class="badge-auto">OC · <%= p.pedido_loja %></span><% } %>
               <% if (p.semaforo.cor !== 'neutro') { %>
                 <span class="badge-sem sem-<%= p.semaforo.cor %>"><%= p.semaforo.label %><% if (p.semaforo.dias != null) { %> · <%= p.semaforo.dias %>d<% } %></span>
               <% } %>
@@ -271,12 +449,12 @@
               <% }) %>
             </div>
             <% const titulo = p.itens.length === 0 ? 'Sem itens'
-                 : p.itens.length === 1 ? p.itens[0].nome + (p.itens[0].tamanho ? ' · ' + p.itens[0].tamanho : '')
-                 : p.itens[0].nome + '  +' + (p.itens.length - 1) + (p.itens.length - 1 === 1 ? ' item' : ' itens') %>
-            <div class="font-display text-lg md:text-xl font-light mt-1 leading-snug truncate" title="<%= p.itens.map(i => i.nome).join(' / ') %>">
+                 : p.itens.length === 1 ? p.itens[0].nome + (p.itens[0].sku ? ' · ' + p.itens[0].sku : '') + (p.itens[0].tamanho ? ' · ' + p.itens[0].tamanho : '')
+                 : p.itens[0].nome + (p.itens[0].sku ? ' · ' + p.itens[0].sku : '') + '  +' + (p.itens.length - 1) + (p.itens.length - 1 === 1 ? ' item' : ' itens') %>
+            <div class="font-display text-lg md:text-xl font-light mt-1 leading-snug truncate compact-title" title="<%= p.itens.map(i => [i.nome, i.sku].filter(Boolean).join(' · ')).join(' / ') %>">
               <%= titulo %>
             </div>
-            <div class="text-medgray text-xs mt-1 font-light">
+            <div class="text-medgray text-xs mt-1 font-light compact-hide">
               <%= p.qtd_itens %> <%= p.qtd_itens===1?'item':'itens' %>
               <% if (p.valor) { %> · <%= p.moeda %> <%= p.valor.toFixed(2) %><% } %>
               <% if (p.qtd_fotos>0) { %> · <%= p.qtd_fotos %> foto(s)<% } %>
@@ -286,16 +464,35 @@
               <div class="text-xs mt-1 font-light" style="color:#3a7d44">→ Redirecionar para: <%= p.redirecionar_para %></div>
             <% } %>
 
-            <div class="flex items-center gap-5 mt-2">
-              <span class="acao-link" style="color:#0a0a0a" x-text="open ? 'Fechar' : 'Detalhes'"></span>
-              <% if (aba !== 'lixeira' && aba !== 'cancelados') { %>
-                <form method="POST" action="/pedidos/<%= p.id %>/cancelar" @click.stop
-                      onsubmit="return confirm('Marcar o pedido #<%= p.numero_pedido %> como CANCELADO?')">
-                  <button class="acao-link" style="color:#92620a">Cancelar</button>
+            <div class="flex flex-wrap items-center gap-2 md:gap-3 mt-3" @click.stop>
+              <button type="button" class="quick-action" style="color:#0a0a0a" @click="open=!open" x-text="open ? 'Fechar' : 'Detalhes'"></button>
+              <% if (p.status==='pendente' && aba!=='lixeira' && aba!=='cancelados') { %>
+                <form method="POST" action="/pedidos/<%= p.id %>/receber">
+                  <button class="quick-action quick-action-green">Recebido</button>
                 </form>
-                <form method="POST" action="/pedidos/<%= p.id %>/excluir" @click.stop
+              <% } %>
+              <% if (p.status==='recebido' && aba!=='lixeira' && aba!=='cancelados' && lotesAtivos.length) { %>
+                <form method="POST" action="/pedidos/<%= p.id %>/enviar" class="flex items-center gap-1">
+                  <select name="lote_id" required class="!text-[11px] !py-1 !px-2 !w-28 md:!w-36" aria-label="Lote">
+                    <option value="">Lote...</option>
+                    <% lotesAtivos.forEach(l => { %><option value="<%= l.id %>"><%= l.descricao || l.id %></option><% }) %>
+                  </select>
+                  <button class="quick-action quick-action-dark">Enviado</button>
+                </form>
+              <% } %>
+              <% if (p.status==='enviado' && aba!=='lixeira' && aba!=='cancelados') { %>
+                <form method="POST" action="/pedidos/<%= p.id %>/entregar" onsubmit="return confirm('Marcar o pedido #<%= p.numero_pedido %> como ENTREGUE?')">
+                  <button class="quick-action quick-action-green">Entregue</button>
+                </form>
+              <% } %>
+              <% if (aba !== 'lixeira' && aba !== 'cancelados') { %>
+                <form method="POST" action="/pedidos/<%= p.id %>/cancelar"
+                      onsubmit="return confirm('Marcar o pedido #<%= p.numero_pedido %> como CANCELADO?')">
+                  <button class="quick-action" style="color:#92620a">Cancelar</button>
+                </form>
+                <form method="POST" action="/pedidos/<%= p.id %>/excluir"
                       onsubmit="return confirm('Mover o pedido #<%= p.numero_pedido %> para a lixeira?')">
-                  <button class="acao-link" style="color:#c4463a">Excluir</button>
+                  <button class="quick-action quick-action-red">Excluir</button>
                 </form>
               <% } %>
             </div>
@@ -347,8 +544,9 @@
           <div class="grid grid-cols-2 md:flex md:flex-wrap gap-x-6 md:gap-x-8 gap-y-3 mb-5">
             <div><div class="kicker">Nº do Pedido</div><div class="text-sm font-light mt-1">#<%= p.numero_pedido %></div></div>
             <div><div class="kicker">Loja</div><div class="text-sm font-light mt-1"><%= p.loja %></div></div>
-            <% if (p.pedido_loja) { %><div><div class="kicker">Nº na Loja</div><div class="text-sm font-light mt-1">#<%= p.pedido_loja %></div></div><% } %>
+            <% if (p.pedido_loja) { %><div><div class="kicker">Ordem de Compra</div><div class="text-sm font-light mt-1"><%= p.pedido_loja %></div></div><% } %>
             <div><div class="kicker">Data da Compra</div><div class="text-sm font-light mt-1"><%= p.data_compra || '—' %></div></div>
+            <% if (p.email_account) { %><div><div class="kicker">Caixa Gmail</div><div class="text-sm font-light mt-1"><%= p.email_account %></div></div><% } %>
             <% if (p.valor) { %><div><div class="kicker">Valor</div><div class="text-sm font-light mt-1"><%= p.moeda %> <%= p.valor.toFixed(2) %></div></div><% } %>
             <% if (p.redirecionar_para) { %><div><div class="kicker">Redirecionar para</div><div class="text-sm font-light mt-1"><%= p.redirecionar_para %></div></div><% } %>
           </div>
@@ -362,7 +560,7 @@
                 <input type="text" name="redirecionar_para" value="<%= p.redirecionar_para || '' %>"
                        placeholder="Nome de quem vai receber / redirecionar"
                        class="flex-1">
-                <button class="btn btn-out w-full md:w-auto">Salvar</button>
+                <button type="submit" onclick="return submitInlineAction(this)" class="btn btn-out w-full md:w-auto">Salvar</button>
               </div>
             </form>
 
@@ -371,12 +569,12 @@
               <div class="flex items-center gap-2">
                 <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
                   <input type="hidden" name="tipo" value="estoque">
-                  <button class="btn w-full md:w-auto <%= p.tipo_origem === 'estoque' ? 'btn-dark' : 'btn-out' %>"
+                  <button type="submit" onclick="return submitInlineAction(this)" class="btn w-full md:w-auto <%= p.tipo_origem === 'estoque' ? 'btn-dark' : 'btn-out' %>"
                           <% if (p.tipo_origem === 'estoque') { %>style="background:#3a7d44"<% } %>>Estoque</button>
                 </form>
                 <form method="POST" action="/pedidos/<%= p.id %>/tipo-origem" class="flex-1 md:flex-none">
                   <input type="hidden" name="tipo" value="encomenda">
-                  <button class="btn w-full md:w-auto <%= p.tipo_origem === 'encomenda' ? 'btn-dark' : 'btn-out' %>"
+                  <button type="submit" onclick="return submitInlineAction(this)" class="btn w-full md:w-auto <%= p.tipo_origem === 'encomenda' ? 'btn-dark' : 'btn-out' %>"
                           <% if (p.tipo_origem === 'encomenda') { %>style="background:#92620a"<% } %>>Encomenda</button>
                 </form>
               </div>
@@ -450,15 +648,24 @@
                 <% } %>
                 <div class="flex-1 min-w-0">
                   <div class="text-sm font-light truncate"><%= it.nome %></div>
-                  <div class="text-medgray text-xs"><%= it.tamanho || '—' %> · qtd <%= it.qtd %></div>
+                  <% if (it.sku) { %><div class="text-[10px] tracking-wider uppercase mt-1"><span class="badge-auto">SKU · <%= it.sku %></span></div><% } %>
+                  <div class="text-medgray text-xs mt-1"><%= it.tamanho || '—' %> · qtd <%= it.qtd %></div>
                   <% if (editavel) { %><div class="text-medgray text-[10px] mt-1 font-light">Clique ou arraste uma imagem no quadro</div><% } %>
                 </div>
               </div>
             <% }) %>
           </div>
 
-          <!-- AÇÃO: ENVIAR (só na aba pendente) -->
+          <!-- AÇÃO: RECEBER (só na aba pendente) -->
           <% if (p.status==='pendente' && aba!=='lixeira' && aba!=='cancelados') { %>
+            <form method="POST" action="/pedidos/<%= p.id %>/receber">
+              <button class="btn btn-dark">Marcar como Recebido →</button>
+            </form>
+            <p class="text-medgray text-[10px] mt-2 font-light">Use quando quem faz o frete recebeu o produto no endereço dele.</p>
+          <% } %>
+
+          <!-- AÇÃO: ENVIAR (só na aba recebido) -->
+          <% if (p.status==='recebido' && aba!=='lixeira' && aba!=='cancelados') { %>
             <form method="POST" action="/pedidos/<%= p.id %>/enviar" class="flex flex-col md:flex-row md:items-end gap-3">
               <div class="flex-1 md:min-w-[200px]">
                 <label>Vincular ao Lote (obrigatório)</label>
@@ -555,7 +762,7 @@
                   <button class="btn btn-out w-full md:w-auto">Lote chegou → Entregue</button>
                 </form>
                 <form method="POST" action="/lotes/<%= l.id %>/excluir"
-                      onsubmit="return confirm('Mover o lote para a lixeira? Os <%= l.pedidos.length %> pedido(s) enviado(s) dele voltarão para Pendente.')">
+                      onsubmit="return confirm('Mover o lote para a lixeira? Os <%= l.pedidos.length %> pedido(s) enviado(s) dele voltarão para Recebido.')">
                   <button class="btn btn-out w-full md:w-auto" style="border-color:#c4463a;color:#c4463a">Excluir</button>
                 </form>
               </div>
@@ -645,6 +852,88 @@
 
   </main>
 
+  <script>
+    function submitInlineAction(button) {
+      const form = button && button.closest ? button.closest('form') : null;
+      if (!form) return true;
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Salvando...';
+      fetch(form.action, {
+        method: 'POST',
+        body: new URLSearchParams(new FormData(form)),
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      }).then(response => {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        window.location.reload();
+      }).catch(error => {
+        button.disabled = false;
+        button.textContent = originalText;
+        alert('Não foi possível salvar. Recarregue a página e tente de novo. ' + error.message);
+      });
+      return false;
+    }
+
+    function comprasDashboard(initialModal = null) {
+      return {
+        modal: initialModal,
+        busca: '',
+        filtroSem: '',
+        tipoOrigem: '',
+        modoCompacto: false,
+        init() {
+          const params = new URLSearchParams(window.location.search);
+          this.busca = params.get('q') || localStorage.getItem('lkCompras.busca') || '';
+          this.filtroSem = params.get('sem') || localStorage.getItem('lkCompras.filtroSem') || '';
+          this.tipoOrigem = params.get('origem') || localStorage.getItem('lkCompras.tipoOrigem') || '';
+          this.modoCompacto = (params.get('compact') || localStorage.getItem('lkCompras.compact')) === '1';
+          this.$watch('busca', () => this.persist());
+          this.$watch('filtroSem', () => this.persist());
+          this.$watch('tipoOrigem', () => this.persist());
+          document.addEventListener('submit', () => this.beforeNavigate(), true);
+          document.addEventListener('click', (ev) => { if (ev.target.closest('a')) this.beforeNavigate(); }, true);
+          const y = Number(localStorage.getItem('lkCompras.scrollY') || 0);
+          if (y > 0) setTimeout(() => window.scrollTo(0, y), 80);
+        },
+        normalize(value) {
+          return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+        },
+        compactSku(value) {
+          return String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+        },
+        matches(el) {
+          const term = this.busca.trim();
+          const text = el.dataset.q || '';
+          const normalizedText = this.normalize(text);
+          const compactText = this.compactSku(text);
+          const normalizedTerm = this.normalize(term);
+          const compactTerm = this.compactSku(term);
+          const buscaOk = !term || normalizedText.includes(normalizedTerm) || (compactTerm.length >= 3 && compactText.includes(compactTerm));
+          const semOk = !this.filtroSem || el.dataset.sem === this.filtroSem;
+          const origemOk = !this.tipoOrigem || el.dataset.origem === this.tipoOrigem;
+          return buscaOk && semOk && origemOk;
+        },
+        clearFilters() {
+          this.busca = '';
+          this.filtroSem = '';
+          this.tipoOrigem = '';
+          this.persist();
+        },
+        persist() {
+          localStorage.setItem('lkCompras.busca', this.busca);
+          localStorage.setItem('lkCompras.filtroSem', this.filtroSem);
+          localStorage.setItem('lkCompras.tipoOrigem', this.tipoOrigem);
+          localStorage.setItem('lkCompras.compact', this.modoCompacto ? '1' : '0');
+        },
+        beforeNavigate() {
+          this.persist();
+          localStorage.setItem('lkCompras.scrollY', String(window.scrollY || 0));
+        }
+      }
+    }
+  </script>
+
   <footer class="bg-black text-warmgray text-center py-8 md:py-10 relative">
     <div class="grain"></div>
     <div class="relative">
@@ -654,5 +943,50 @@
     </div>
   </footer>
 
+  <script>
+    (() => {
+      function showToast(text) {
+        let el = document.querySelector('[data-ajax-toast]');
+        if (!el) {
+          el = document.createElement('div');
+          el.setAttribute('data-ajax-toast', '1');
+          el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:9999;background:#0a0a0a;color:#fff;padding:10px 14px;font-size:11px;letter-spacing:1.5px;text-transform:uppercase';
+          document.body.appendChild(el);
+        }
+        el.textContent = text;
+        setTimeout(() => { if (el) el.remove(); }, 1800);
+      }
+      async function refreshPage(url, scrollY) {
+        const response = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'text/html' } });
+        const html = await response.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const nextMain = doc.querySelector('main');
+        if (!response.ok || !nextMain) throw new Error('Falha ao atualizar');
+        document.querySelector('main').replaceWith(nextMain);
+        history.replaceState(null, '', response.url || url);
+        requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0, behavior: 'auto' }));
+      }
+      document.addEventListener('submit', async (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if (String(form.method || '').toLowerCase() !== 'post') return;
+        if (form.enctype && form.enctype.includes('multipart/form-data')) return;
+        if (!form.closest('main')) return;
+        event.preventDefault();
+        const submitter = event.submitter;
+        const scrollY = window.scrollY;
+        if (submitter) submitter.disabled = true;
+        try {
+          const response = await fetch(form.action, { method: 'POST', body: new FormData(form), credentials: 'same-origin', headers: { Accept: 'text/html' } });
+          await refreshPage(response.url || window.location.href, scrollY);
+          showToast('Atualizado');
+        } catch (err) {
+          form.submit();
+        } finally {
+          if (submitter) submitter.disabled = false;
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
