@@ -152,23 +152,6 @@ app.get('/check-atrasos', async (req, res) => {
   res.render('erro', { msg });
 });
 
-// ── MUDANÇA DE STATUS REVERSÍVEL (qualquer direção) ──
-app.post('/pedidos/:id/status', (req, res) => {
-  const { status, lote_id } = req.body;
-  try {
-    store.mudarStatus(req.params.id, status, lote_id);
-    const destino = status === 'cancelado' ? 'cancelados' : status;
-    res.redirect('/?aba=' + destino);
-  } catch (e) {
-    const msgs = {
-      FOTO_OBRIGATORIA: 'Anexe ao menos uma foto antes de marcar como enviado.',
-      LOTE_OBRIGATORIO: 'Selecione um lote para marcar como enviado.',
-      STATUS_INVALIDO: 'Status inválido.'
-    };
-    res.status(400).render('erro', { msg: msgs[e.message] || e.message });
-  }
-});
-
 // ── TIPO DE ORIGEM: seleção direta (estoque / encomenda; clicar no ativo limpa) ──
 app.post('/pedidos/:id/tipo-origem', (req, res) => {
   store.definirTipoOrigem(req.params.id, req.body.tipo);
