@@ -173,11 +173,11 @@ export function resumo() {
   for (const s of ['pendente', 'enviado', 'entregue', 'cancelado']) {
     r[s] = db.prepare('SELECT COUNT(*) c FROM pedidos WHERE status = ? AND excluido_em IS NULL').get(s).c;
   }
-  // prioridade: pedidos priorizados que ainda aguardam envio (mesma regra da aba)
+  // prioridade: pedidos com e-mail de prioridade enviado, ainda não chegados/cancelados
   r.prioridade = db.prepare(`
     SELECT COUNT(*) c FROM pedidos
     WHERE prioridade_enviada_em IS NOT NULL
-      AND status = 'pendente' AND excluido_em IS NULL
+      AND status NOT IN ('entregue','cancelado') AND excluido_em IS NULL
   `).get().c;
   return r;
 }
@@ -322,13 +322,12 @@ export function marcarPrioridadeEnviada(pedido_id) {
 }
 
 // ── PRIORIDADE ──
-// Só pedidos que AINDA aguardam envio: assim que são enviados, saem desta aba
-// (mas mantêm o selo de prioridade no card, visível em qualquer aba).
+// Agrupa pedidos com e-mail de prioridade enviado, que ainda não chegaram.
 export function listarPrioridade() {
   const rows = db.prepare(`
     SELECT * FROM pedidos
     WHERE prioridade_enviada_em IS NOT NULL
-      AND status = 'pendente'
+      AND status NOT IN ('entregue','cancelado')
       AND excluido_em IS NULL
     ORDER BY prioridade_enviada_em DESC
   `).all();
@@ -403,39 +402,4 @@ export function definirTipoOrigem(pedido_id, tipo) {
   const valido = (tipo === 'estoque' || tipo === 'encomenda') ? tipo : null;
   const novo = (p.tipo_origem === valido) ? null : valido;   // clicar no ativo desmarca
   db.prepare('UPDATE pedidos SET tipo_origem = ? WHERE id = ?').run(novo, pedido_id);
-}
-
-// ── MUDANÇA DE STATUS REVERSÍVEL ──
-// Move um pedido para qualquer status, em qualquer direção, aplicando as regras:
-//  • → pendente : desvincula do lote e limpa cancelamento
-//  • → enviado  : exige foto + lote; se o lote estava 'entregue', reabre em trânsito
-//  • → entregue : mantém o vínculo do lote (histórico da caixa que chegou)
-//  • → cancelado: desvincula do lote e registra a data
-// Os registros de notificação (compra confirmada, atraso avisado, prioridade)
-// NÃO são apagados: são histórico do que aconteceu, não do estado atual.
-export function mudarStatus(pedido_id, novo, lote_id) {
-  const pedido = getPedidoCompleto(pedido_id);
-  if (!pedido) throw new Error('Pedido não encontrado');
-  if (!['pendente', 'enviado', 'entregue', 'cancelado'].includes(novo)) throw new Error('STATUS_INVALIDO');
-
-  const tx = db.transaction(() => {
-    if (novo === 'pendente') {
-      db.prepare(`UPDATE pedidos SET status='pendente', lote_id=NULL, cancelado_em=NULL WHERE id=?`).run(pedido_id);
-
-    } else if (novo === 'enviado') {
-      const alvo = lote_id || pedido.lote_id;
-      if (!pedido.itens.some(i => i.foto_url)) throw new Error('FOTO_OBRIGATORIA');
-      if (!alvo) throw new Error('LOTE_OBRIGATORIO');
-      db.prepare(`UPDATE pedidos SET status='enviado', lote_id=?, cancelado_em=NULL WHERE id=?`).run(alvo, pedido_id);
-      // regra: reverter uma entrega reabre o lote (volta a estar em trânsito)
-      db.prepare(`UPDATE lotes SET status='em_transito' WHERE id=? AND status='entregue'`).run(alvo);
-
-    } else if (novo === 'entregue') {
-      db.prepare(`UPDATE pedidos SET status='entregue', cancelado_em=NULL WHERE id=?`).run(pedido_id);
-
-    } else if (novo === 'cancelado') {
-      db.prepare(`UPDATE pedidos SET status='cancelado', cancelado_em=datetime('now'), lote_id=NULL WHERE id=?`).run(pedido_id);
-    }
-  });
-  tx();
 }
