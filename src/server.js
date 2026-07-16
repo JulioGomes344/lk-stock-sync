@@ -9,6 +9,8 @@ import { enviarAlertaAtraso, enviarAvisoPedido, enviarConfirmacaoCompra, destina
 import { initDb } from './init-db.js';
 import { sincronizarGmail, gmailConfigurado } from './gmail.js';
 import { exigirLogin, criarSessao, encerrarSessao, senhaCorreta, senhaConfigurada } from './auth.js';
+import { parseOperatorMessage, normalizeText } from './operatorParser.js';
+import { sendWhatsappGroupMessage } from './whatsappProvider.js';
 
 // Cria as tabelas e a pasta de uploads no boot (idempotente).
 // Assim o app nunca sobe sem schema — não depende do start command.
@@ -46,43 +48,173 @@ app.get('/logout', (req, res) => { encerrarSessao(res); res.redirect('/login'); 
 // e o e-mail de atraso precisa carregar as imagens sem sessão.
 app.use('/uploads', express.static(UPLOAD_DIR));
 
+// ── WEBHOOK OPERADOR WHATSAPP (antes do login; protegido por token + grupo + allowlist) ──
+function tokenWebhookValido(req) {
+  const tokens = [
+    process.env.OPERATOR_WEBHOOK_TOKEN,
+    process.env.LK_STOCK_HERMES_ROUTE_SECRET
+  ].filter(Boolean);
+  if (!tokens.length) return false;
+  return tokens.some(token =>
+    req.headers.authorization === `Bearer ${token}`
+    || req.headers.apikey === token
+    || req.query.token === token
+  );
+}
+
+function normalizarPayloadEvolution(payload) {
+  const data = payload?.data || payload;
+  const key = data?.key || {};
+  const message = data?.message || {};
+  const text = message?.conversation
+    || message?.extendedTextMessage?.text
+    || message?.imageMessage?.caption
+    || '';
+
+  return {
+    channel: 'whatsapp',
+    groupId: key.remoteJid,
+    sender: {
+      id: String(key.participant || data?.participant || '').replace('@s.whatsapp.net', ''),
+      name: data?.pushName || data?.senderName || 'Operador'
+    },
+    message: {
+      id: key.id || data?.id || null,
+      text,
+      timestamp: new Date().toISOString()
+    }
+  };
+}
+
+async function processarMensagemOperador(payload) {
+  const { channel, groupId, sender, message } = payload;
+  const text = message?.text || '';
+
+  if (process.env.WHATSAPP_GROUP_ID && groupId !== process.env.WHATSAPP_GROUP_ID) {
+    return { status: 'ignored', reply: null };
+  }
+  if (!text.trim()) return { status: 'ignored', reply: null };
+
+  const operatorMessageId = store.registrarMensagemOperador({
+    channel,
+    groupId,
+    senderIdentifier: sender?.id || null,
+    senderName: sender?.name || null,
+    rawMessage: text,
+    normalizedMessage: normalizeText(text)
+  });
+
+  const operator = store.buscarOperadorAutorizado(channel, sender?.id);
+  if (!operator) {
+    store.atualizarMensagemOperador(operatorMessageId, { status: 'unauthorized' });
+    return { status: 'unauthorized', reply: 'Número não autorizado para atualizar pedidos.' };
+  }
+
+  const parsed = parseOperatorMessage(text);
+  store.atualizarMensagemOperador(operatorMessageId, { parserResult: parsed });
+
+  if (parsed.intent === 'unknown') {
+    store.atualizarMensagemOperador(operatorMessageId, { status: 'unknown' });
+    return { status: 'unknown', reply: 'Não entendi. Use: recebido 1050 ou enviado 1050 lote CX12 tracking LB123BR' };
+  }
+
+  const result = store.aplicarAcaoOperador(parsed, operator, operatorMessageId, text);
+  store.atualizarMensagemOperador(operatorMessageId, { status: result.status });
+  return result;
+}
+
+app.post('/api/operator-message', async (req, res) => {
+  if (!tokenWebhookValido(req)) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const result = await processarMensagemOperador(req.body);
+    if (result.reply) await sendWhatsappGroupMessage(result.reply);
+    res.json(result);
+  } catch (e) {
+    console.error('operator-message error:', e);
+    res.status(500).json({ error: 'operator_message_error' });
+  }
+});
+
+app.post('/webhooks/evolution', async (req, res) => {
+  if (!tokenWebhookValido(req)) return res.status(401).json({ error: 'unauthorized' });
+  try {
+    const payload = normalizarPayloadEvolution(req.body);
+    const result = await processarMensagemOperador(payload);
+    if (result.reply) await sendWhatsappGroupMessage(result.reply);
+    res.json(result);
+  } catch (e) {
+    console.error('evolution webhook error:', e);
+    res.status(500).json({ error: 'evolution_webhook_error' });
+  }
+});
+
 app.use(exigirLogin);
 
 // ── DASHBOARD (3 abas) ──
 app.get('/', (req, res) => {
-  const aba = ['pendente', 'enviado', 'entregue', 'prioridade', 'cancelados', 'lotes', 'lixeira'].includes(req.query.aba) ? req.query.aba : 'pendente';
+  const aba = ['pendente', 'recebido', 'enviado', 'entregue', 'prioridade', 'cancelados', 'lotes', 'lixeira', 'whatsapp'].includes(req.query.aba) ? req.query.aba : 'pendente';
+  const filtroRedirecionar = String(req.query.redirecionar_para || '').trim();
+  const filtroTipoOrigem = ['estoque', 'encomenda', 'sem_tipo'].includes(String(req.query.tipo_origem || '')) ? String(req.query.tipo_origem) : '';
+  const manualProduto = String(req.query.manualProduto || '').trim();
+  const pedidosBase = aba === 'lixeira' ? store.listarLixeira()
+           : aba === 'whatsapp' ? []
+           : aba === 'prioridade' ? store.listarPrioridade()
+           : aba === 'cancelados' ? store.listarCancelados()
+           : store.listarPorStatus(aba);
+  const redirecionarOptions = [...new Set(pedidosBase.map(p => String(p.redirecionar_para || '').trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const pedidosFiltrados = pedidosBase.filter(p => {
+    if (filtroRedirecionar && String(p.redirecionar_para || '').trim() !== filtroRedirecionar) return false;
+    if (filtroTipoOrigem === 'estoque' || filtroTipoOrigem === 'encomenda') return p.tipo_origem === filtroTipoOrigem;
+    if (filtroTipoOrigem === 'sem_tipo') return !p.tipo_origem;
+    return true;
+  });
   res.render('dashboard', {
     aba,
     resumo: store.resumo(),
     resumoSemaforo: store.resumoSemaforo(),
-    pedidos: aba === 'lixeira' ? store.listarLixeira()
-           : aba === 'prioridade' ? store.listarPrioridade()
-           : aba === 'cancelados' ? store.listarCancelados()
-           : store.listarPorStatus(aba),
+    pedidos: pedidosFiltrados,
+    totalPedidosSemFiltro: pedidosBase.length,
+    filtrosCompras: { redirecionar_para: filtroRedirecionar, tipo_origem: filtroTipoOrigem, manualProduto },
+    redirecionarOptions,
     lotes: store.listarLotesComPedidos(),
     lotesLixeira: aba === 'lixeira' ? store.listarLotesLixeira() : [],
     lotesAtivos: store.listarLotesAtivos(),
+    historicoWhatsapp: aba === 'whatsapp' ? store.listarHistoricoWhatsapp(150) : [],
+    filaErrosWhatsapp: aba === 'whatsapp' ? store.listarFilaErrosWhatsapp(50) : [],
     LOJAS: store.listarLojas(),
     destinatariosPadrao: destinatariosPadrao()
   });
+});
+
+// ── WHATSAPP: limpar mensagens da fila de erros ──
+app.post('/whatsapp/erros/excluir', (req, res) => {
+  store.excluirFilaErrosWhatsapp();
+  res.redirect('/?aba=whatsapp');
+});
+
+app.post('/whatsapp/mensagens/:id/excluir', (req, res) => {
+  store.excluirMensagemWhatsapp(req.params.id);
+  res.redirect('/?aba=whatsapp');
 });
 
 // ── CRIAR PEDIDO (manual) ──
 // upload.any() aceita os campos de foto indexados (item_foto_0, item_foto_1...)
 // junto com os campos de texto do formulário
 app.post('/pedidos', upload.any(), (req, res) => {
-  const { loja, loja_nova, data_compra, valor, moeda } = req.body;
+  const { loja, loja_nova, data_compra, valor, moeda, pedido_loja } = req.body;
   // Se o usuário escolheu "Outra" e digitou um nome, usa esse nome
   const lojaFinal = (loja === '__nova__' && loja_nova?.trim()) ? loja_nova.trim() : loja;
-  const pid = store.criarPedido({ loja: lojaFinal, data_compra, valor: valor ? parseFloat(valor) : null, moeda });
+  const pid = store.criarPedido({ loja: lojaFinal, data_compra, valor: valor ? parseFloat(valor) : null, moeda, pedido_loja: pedido_loja?.trim() || null });
 
   // itens vêm como arrays paralelos do form; fotos casam pelo índice no fieldname
   const nomes = [].concat(req.body.item_nome || []);
+  const skus = [].concat(req.body.item_sku || []);
   const tams = [].concat(req.body.item_tamanho || []);
   const qtds = [].concat(req.body.item_qtd || []);
   nomes.forEach((nome, i) => {
     if (!nome?.trim()) return;
-    const itemId = store.adicionarItem(pid, { nome, tamanho: tams[i], qtd: parseInt(qtds[i]) || 1 });
+    const itemId = store.adicionarItem(pid, { nome, sku: skus[i]?.trim() || null, tamanho: tams[i], qtd: parseInt(qtds[i]) || 1 });
     const foto = (req.files || []).find(f => f.fieldname === `item_foto_${i}`);
     if (foto) store.anexarFoto(itemId, '/uploads/' + foto.filename);
   });
@@ -97,9 +229,24 @@ app.post('/itens/:id/foto', upload.single('foto'), (req, res) => {
 
 // ── CRIAR LOTE ──
 app.post('/lotes', (req, res) => {
-  const { descricao, transportadora, codigo_rastreio, data_envio } = req.body;
+  const { transportadora, codigo_rastreio, data_envio } = req.body;
+  const descricao = (req.body.descricao || req.body.nome || req.body.nome_lote || req.body.lote || '').trim();
   store.criarLote({ descricao, transportadora, codigo_rastreio, data_envio });
   res.redirect('/?aba=pendente');
+});
+
+// ── MOVER PEDIDO PARA RECEBIDO ──
+app.post('/pedidos/:id/receber', (req, res) => {
+  try {
+    store.marcarRecebido(req.params.id);
+    res.redirect('/?aba=recebido');
+  } catch (e) {
+    const msgs = {
+      PEDIDO_CANCELADO: 'Pedido cancelado não pode ser marcado como recebido.',
+      PEDIDO_ENTREGUE: 'Pedido entregue não pode voltar para recebido.'
+    };
+    res.status(400).render('erro', { msg: msgs[e.message] || e.message });
+  }
 });
 
 // ── MOVER PEDIDO PARA ENVIADO (valida foto + lote) ──
@@ -116,6 +263,12 @@ app.post('/pedidos/:id/enviar', (req, res) => {
   }
 });
 
+// ── ENTREGAR PEDIDO INDIVIDUAL ──
+app.post('/pedidos/:id/entregar', (req, res) => {
+  store.marcarEntregue(req.params.id);
+  res.redirect('/?aba=entregue');
+});
+
 // ── ENTREGAR LOTE INTEIRO ──
 app.post('/lotes/:id/entregar', (req, res) => {
   store.entregarLote(req.params.id);
@@ -127,7 +280,7 @@ app.get('/sync-gmail', async (req, res) => {
   const r = await sincronizarGmail();
   res.render('erro', {
     msg: r.ok
-      ? `Sincronização concluída: ${r.criados} pedido(s) novo(s), ${r.ignorados} ignorado(s) (já processados ou não-confirmação), ${r.processados} e-mail(s) lidos.`
+      ? `Sincronização concluída: ${r.criados} pedido(s) novo(s), ${r.atualizados || 0} pedido(s) corrigido(s), ${r.ignorados} ignorado(s) (já processados ou não-confirmação), ${r.processados} e-mail(s) lidos em ${r.contas || 1} caixa(s).`
       : `Sincronização indisponível: ${r.motivo}`
   });
 });
@@ -152,16 +305,26 @@ app.get('/check-atrasos', async (req, res) => {
   res.render('erro', { msg });
 });
 
+function redirectParaAbaDoPedido(req, res, pedidoId) {
+  const pedido = store.getPedidoEnriquecido(pedidoId);
+  const aba = pedido?.status && ['pendente', 'recebido', 'enviado', 'entregue'].includes(pedido.status) ? pedido.status : 'pendente';
+  res.redirect(`/?aba=${aba}`);
+}
+
 // ── TIPO DE ORIGEM: seleção direta (estoque / encomenda; clicar no ativo limpa) ──
 app.post('/pedidos/:id/tipo-origem', (req, res) => {
+  const pedido = store.getPedidoEnriquecido(req.params.id);
+  if (!pedido) return res.status(404).render('erro', { msg: 'Pedido não encontrado.' });
   store.definirTipoOrigem(req.params.id, req.body.tipo);
-  res.redirect(req.get('Referrer') || '/');
+  redirectParaAbaDoPedido(req, res, req.params.id);
 });
 
 // ── REDIRECIONAMENTO DA COMPRA (texto livre, salvo no pedido) ──
 app.post('/pedidos/:id/redirecionar', (req, res) => {
+  const pedido = store.getPedidoEnriquecido(req.params.id);
+  if (!pedido) return res.status(404).render('erro', { msg: 'Pedido não encontrado.' });
   store.salvarRedirecionamento(req.params.id, req.body.redirecionar_para);
-  res.redirect(req.get('Referrer') || '/');
+  redirectParaAbaDoPedido(req, res, req.params.id);
 });
 
 // ── CANCELAMENTO E RECOMPRA ──
