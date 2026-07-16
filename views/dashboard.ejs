@@ -457,49 +457,21 @@
             <% }) %>
           </div>
 
-          <!-- STATUS DO PEDIDO (reversível: qualquer direção) -->
-          <% if (aba!=='lixeira') { %>
-            <div class="border-t border-lightgray pt-4">
-              <div class="kicker mb-2">Status do pedido</div>
-              <div class="flex flex-wrap items-center gap-2" x-data="{ mostrarLote: false }">
-                <% const estados = [
-                     { v:'pendente',  label:'Pendente',  cor:'#8a8580' },
-                     { v:'enviado',   label:'Enviado',   cor:'#0a0a0a' },
-                     { v:'entregue',  label:'Entregue',  cor:'#3a7d44' },
-                     { v:'cancelado', label:'Cancelado', cor:'#c4463a' }
-                   ] %>
-                <% estados.forEach(e => { %>
-                  <% if (p.status === e.v) { %>
-                    <span class="btn btn-dark" style="background:<%= e.cor %>;cursor:default"><%= e.label %> ✓</span>
-                  <% } else if (e.v === 'enviado') { %>
-                    <button type="button" class="btn btn-out" @click="mostrarLote = !mostrarLote">Enviado</button>
-                  <% } else { %>
-                    <form method="POST" action="/pedidos/<%= p.id %>/status"
-                          onsubmit="return confirm('Mover o pedido #<%= p.numero_pedido %> para <%= e.label.toUpperCase() %>?')">
-                      <input type="hidden" name="status" value="<%= e.v %>">
-                      <button class="btn btn-out"><%= e.label %></button>
-                    </form>
-                  <% } %>
-                <% }) %>
-
-                <!-- seletor de lote: aparece ao escolher Enviado -->
-                <form method="POST" action="/pedidos/<%= p.id %>/status" x-show="mostrarLote" x-cloak
-                      class="flex flex-col md:flex-row md:items-center gap-2 w-full mt-2">
-                  <input type="hidden" name="status" value="enviado">
-                  <select name="lote_id" required class="flex-1" style="max-width:340px">
-                    <option value="">Selecione o lote...</option>
-                    <% lotesAtivos.forEach(l => { %>
-                      <option value="<%= l.id %>" <%= p.lote_id===l.id?'selected':'' %>><%= l.descricao || l.id %> <%= l.transportadora?'· '+l.transportadora:'' %></option>
-                    <% }) %>
-                  </select>
-                  <button class="btn btn-dark">Confirmar Enviado →</button>
-                </form>
+          <!-- AÇÃO: ENVIAR (só na aba pendente) -->
+          <% if (p.status==='pendente' && aba!=='lixeira' && aba!=='cancelados') { %>
+            <form method="POST" action="/pedidos/<%= p.id %>/enviar" class="flex flex-col md:flex-row md:items-end gap-3">
+              <div class="flex-1 md:min-w-[200px]">
+                <label>Vincular ao Lote (obrigatório)</label>
+                <select name="lote_id" required>
+                  <option value="">Selecione um lote...</option>
+                  <% lotesAtivos.forEach(l => { %>
+                    <option value="<%= l.id %>"><%= l.descricao || l.id %> <%= l.transportadora?'· '+l.transportadora:'' %></option>
+                  <% }) %>
+                </select>
               </div>
-              <p class="text-medgray text-[10px] mt-2 font-light">
-                Você pode mover o pedido entre os status livremente. Enviado requer 1 foto + lote.
-                Voltar para Pendente desvincula do lote; reverter uma entrega reabre o lote.
-              </p>
-            </div>
+              <button class="btn btn-dark">Marcar como Enviado →</button>
+            </form>
+            <p class="text-medgray text-[10px] mt-2 font-light">Requer ao menos 1 foto anexada + lote selecionado.</p>
           <% } %>
         </div>
       </div>
