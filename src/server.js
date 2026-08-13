@@ -280,7 +280,7 @@ app.get('/sync-gmail', async (req, res) => {
   const r = await sincronizarGmail();
   res.render('erro', {
     msg: r.ok
-      ? `Sincronização concluída: ${r.criados} pedido(s) novo(s), ${r.atualizados || 0} pedido(s) corrigido(s), ${r.ignorados} ignorado(s) (já processados ou não-confirmação), ${r.processados} e-mail(s) lidos em ${r.contas || 1} caixa(s).`
+      ? `Sincronização concluída: ${r.criados} pedido(s) novo(s), ${r.recebidos || 0} movido(s) para Recebido por e-mail de entrega${r.entregasSemPedido ? ` (${r.entregasSemPedido} entrega(s) sem pedido correspondente)` : ''}, ${r.atualizados || 0} pedido(s) corrigido(s), ${r.ignorados} ignorado(s) (já processados ou não-confirmação), ${r.processados} e-mail(s) lidos em ${r.contas || 1} caixa(s).`
       : `Sincronização indisponível: ${r.motivo}`
   });
 });
@@ -496,6 +496,7 @@ async function sincronizarGmailAutomatico() {
   if (!gmailConfigurado()) return; // sem credenciais, fica em silêncio
   const r = await sincronizarGmail();
   if (r.ok && r.criados > 0) console.log(`✓ [cron-gmail] ${r.criados} pedido(s) novo(s) importado(s).`);
+  if (r.ok && r.recebidos > 0) console.log(`✓ [cron-gmail] ${r.recebidos} pedido(s) movido(s) para Recebido por e-mail de entrega.`);
 }
 setTimeout(sincronizarGmailAutomatico, 60 * 1000);  // 1min após o boot
 setInterval(sincronizarGmailAutomatico, MEIA_HORA);
