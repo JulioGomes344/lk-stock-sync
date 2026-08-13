@@ -51,6 +51,8 @@ export function initDb() {
       origem        TEXT NOT NULL DEFAULT 'manual',   -- manual | email
       email_id      TEXT,
       email_account TEXT,                              -- caixa Gmail que originou a captura
+      recebido_em   TEXT,                              -- quando virou 'recebido'
+      recebido_via  TEXT,                              -- email | manual | whatsapp
       lote_id       TEXT,
       tracking_code TEXT,                              -- rastreio informado pelo operador/WhatsApp
       observacoes   TEXT,                              -- observações operacionais do operador/WhatsApp
@@ -163,7 +165,9 @@ function migrar() {
       tipo_origem: 'TEXT',
       tracking_code: 'TEXT',
       observacoes: 'TEXT',
-      email_account: 'TEXT'
+      email_account: 'TEXT',
+      recebido_em: 'TEXT',
+      recebido_via: 'TEXT'
     },
     itens: {
       sku: 'TEXT',
