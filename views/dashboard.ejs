@@ -441,6 +441,7 @@
               <% if (p.origem==='email') { %><span class="badge-auto">Auto · Gmail</span><% } %>
               <% if (p.tipo_origem === 'estoque') { %><span class="badge-tipo" style="background:rgba(58,125,68,.10);color:#3a7d44">Estoque</span><% } %>
               <% if (p.tipo_origem === 'encomenda') { %><span class="badge-tipo" style="background:rgba(146,98,10,.12);color:#92620a">Encomenda</span><% } %>
+              <% if (p.recebido_via) { %><span class="badge-status">✓ Recebido <%= p.recebido_via==='email' ? 'via e-mail da loja' : p.recebido_via==='whatsapp' ? 'via WhatsApp' : 'manualmente' %></span><% } %>
               <% if (p.compra_confirmada_em) { %><span class="badge-status">✓ Compra confirmada</span><% } %>
               <% if (p.aviso_atraso_em) { %><span class="badge-status">✓ Atraso avisado</span><% } %>
               <% if (p.prioridade_enviada_em) { %><span class="badge-status">✓ Prioridade enviada</span><% } %>
@@ -467,8 +468,9 @@
             <div class="flex flex-wrap items-center gap-2 md:gap-3 mt-3" @click.stop>
               <button type="button" class="quick-action" style="color:#0a0a0a" @click="open=!open" x-text="open ? 'Fechar' : 'Detalhes'"></button>
               <% if (p.status==='pendente' && aba!=='lixeira' && aba!=='cancelados') { %>
-                <form method="POST" action="/pedidos/<%= p.id %>/receber">
-                  <button class="quick-action quick-action-green">Recebido</button>
+                <form method="POST" action="/pedidos/<%= p.id %>/receber"
+                      onsubmit="return confirm('O recebimento é automático pelo e-mail de entrega da loja. Marcar o pedido #<%= p.numero_pedido %> como RECEBIDO manualmente?')">
+                  <button class="quick-action" style="color:#92620a" title="Use só quando a loja não mandar e-mail de entrega">Recebido (manual)</button>
                 </form>
               <% } %>
               <% if (p.status==='recebido' && aba!=='lixeira' && aba!=='cancelados' && lotesAtivos.length) { %>
