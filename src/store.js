@@ -130,8 +130,70 @@ export function marcarRecebido(pedido_id) {
   if (pedido.status === 'cancelado') throw new Error('PEDIDO_CANCELADO');
   if (pedido.status === 'entregue') throw new Error('PEDIDO_ENTREGUE');
 
-  db.prepare('UPDATE pedidos SET status = ? WHERE id = ?')
-    .run('recebido', pedido_id);
+  db.prepare(`UPDATE pedidos SET status = 'recebido', recebido_em = datetime('now'), recebido_via = 'manual' WHERE id = ?`)
+    .run(pedido_id);
+}
+
+// ── RECEBIMENTO AUTOMÁTICO POR E-MAIL DE ENTREGA ──
+// A loja confirma a entrega no endereço do freight forwarder → Pendente vira
+// Recebido sozinho. Casa primeiro pelo nº do pedido na loja e, se a loja não
+// mandar o número no e-mail de entrega (StockX), pelo NOME do produto.
+//
+// Idempotente: só age sobre pedidos 'pendente'. Reprocessar o mesmo e-mail
+// (ou receber a mesma entrega em duas caixas Gmail) não muda nada.
+const normalizarNome = (x) => (x || '').toLowerCase()
+  .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+
+function buscarPedidoParaEntrega(loja, { pedido_loja, nome }) {
+  if (pedido_loja) {
+    const porLoja = db.prepare(`
+      SELECT * FROM pedidos
+      WHERE loja = ? AND pedido_loja = ? AND excluido_em IS NULL
+      ORDER BY criado_em DESC LIMIT 1
+    `).get(loja, pedido_loja);
+    if (porLoja) return porLoja;
+
+    // mesma OC capturada com a loja gravada diferente (ex: caixa secundária)
+    const global = db.prepare(`
+      SELECT * FROM pedidos
+      WHERE pedido_loja = ? AND excluido_em IS NULL
+      ORDER BY criado_em DESC LIMIT 1
+    `).get(pedido_loja);
+    if (global) return global;
+  }
+
+  if (!nome) return null;
+  const alvo = normalizarNome(nome);
+  if (alvo.length < 6) return null; // nome curto demais casaria qualquer coisa
+
+  // só pedidos ainda a caminho, mais antigo primeiro (a entrega mais antiga
+  // pendente é a que chegou, quando há dois iguais em tamanhos diferentes)
+  const candidatos = db.prepare(`
+    SELECT p.*, i.nome AS item_nome FROM pedidos p
+    JOIN itens i ON i.pedido_id = p.id
+    WHERE p.loja = ? AND p.status = 'pendente' AND p.excluido_em IS NULL
+    ORDER BY p.criado_em ASC
+  `).all(loja);
+
+  return candidatos.find(c => {
+    const n = normalizarNome(c.item_nome);
+    return n.length >= 6 && (n === alvo || n.includes(alvo) || alvo.includes(n));
+  }) || null;
+}
+
+// Retorna { atualizado, pedido, motivo } — motivo explica por que nada mudou,
+// para o log da sincronização não virar caixa-preta.
+export function marcarRecebidoPorEmail(loja, { pedido_loja = null, nome = null } = {}) {
+  const pedido = buscarPedidoParaEntrega(loja, { pedido_loja, nome });
+  if (!pedido) return { atualizado: 0, motivo: 'pedido_nao_encontrado' };
+  if (pedido.status !== 'pendente') return { atualizado: 0, pedido, motivo: `ja_${pedido.status}` };
+
+  db.prepare(`
+    UPDATE pedidos
+    SET status = 'recebido', recebido_em = datetime('now'), recebido_via = 'email'
+    WHERE id = ?
+  `).run(pedido.id);
+  return { atualizado: 1, pedido };
 }
 
 // Mover para Enviado exige: pelo menos 1 foto anexada E vínculo a um lote.
@@ -688,7 +750,7 @@ export function aplicarAcaoOperador(parsed, operator, operatorMessageId, rawMess
     if (pedido.status === 'entregue') return { status: 'blocked', reply: `${refProduto} já está entregue.` };
     if (pedido.status === 'cancelado') return { status: 'blocked', reply: `${refProduto} está cancelado.` };
 
-    db.prepare(`UPDATE pedidos SET status = 'recebido' WHERE id = ?`).run(pedido.id);
+    db.prepare(`UPDATE pedidos SET status = 'recebido', recebido_em = datetime('now'), recebido_via = 'whatsapp' WHERE id = ?`).run(pedido.id);
     registrarEventoOperador({ orderId: pedido.id, eventType: 'status_changed', oldStatus: pedido.status, newStatus: 'recebido', ...actor });
     return { status: 'applied', reply: respostaRecebidoOperador(pedido) };
   }
