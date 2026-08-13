@@ -15,6 +15,13 @@ const textoLimpo = (html = '', text = '') => decode(`${text || ''}\n${html || ''
   .replace(/<[^>]+>/g, ' ')
   .replace(/\s+/g, ' '));
 
+// Limpeza alternativa: troca tags por "|" em vez de espaço. Preserva as
+// fronteiras entre blocos do HTML (GOAT depende disso para achar nome/tamanho).
+const textoPipe = (html = '') => (html || '')
+  .replace(/&nbsp;/g, ' ').replace(/&#39;|&rsquo;/g, "'").replace(/&amp;/g, '&')
+  .replace(/<[^>]+>/g, '|').replace(/[\u200b-\u200d\ufeff]/g, '')
+  .replace(/\|+/g, '|').replace(/\s+/g, ' ');
+
 const sanitizarSku = (sku) => {
   const limpo = String(sku || '')
     .replace(/\bSIZE\b.*$/i, '')
@@ -183,10 +190,7 @@ function parseStockX({ subject, html, text }) {
 function parseGOAT({ subject, html }) {
   const pedido = ((subject || '').match(/#(\d{5,})/) || [])[1];
 
-  const txt = html
-    .replace(/&nbsp;/g, ' ').replace(/&#39;|&rsquo;/g, "'").replace(/&amp;/g, '&')
-    .replace(/<[^>]+>/g, '|').replace(/[\u200b-\u200d\ufeff]/g, '')
-    .replace(/\|+/g, '|').replace(/\s+/g, ' ');
+  const txt = textoPipe(html);
 
   let nome = ((txt.match(/You ordered the ([^|]+?)\s*\|/) || [])[1] || '').trim() || null;
   // fallback: o texto entre a imagem do produto e o bloco de tamanho
@@ -228,6 +232,72 @@ export function parseEnvioStockX({ subject, html }) {
   const m = html.match(/<img[^>]+src="(https:\/\/images\.stockx\.com\/images\/[^"]+)"/);
   if (!pedido || !m) return null;
   return { pedido_loja: pedido, foto_url: m[1] };
+}
+
+// ── ENTREGA (Pendente → Recebido) ──
+// A loja avisa quando o pacote chegou no endereço do freight forwarder.
+// Esse e-mail NÃO cria pedido: ele move um pedido existente para Recebido.
+//
+// Cuidado deliberado com falso positivo: "out for delivery", "will be
+// delivered", "delivery attempt" e afins NÃO contam como entrega.
+const PADROES_ENTREGA = [
+  /\bdelivered\b/i,                         // "Delivered: <produto>", "Your order has been delivered"
+  /delivery (?:is |was )?complete/i,        // Shopify: "Your delivery is complete"
+  /(?:order|package|parcel)\s+(?:has\s+)?arrived/i,
+  /pedido\s+(?:foi\s+)?entregue/i,
+  /entrega\s+(?:realizada|conclu[íi]da|efetuada)/i
+];
+
+const PADROES_NAO_ENTREGA = [
+  /out for delivery/i,
+  /(?:will|to)\s+be\s+delivered/i,
+  /estimated\s+deliver/i,
+  /delivery\s+(?:attempt|failed|exception|delayed|update|scheduled|window)/i,
+  /sa[ií]u para entrega/i,
+  /previs[ãa]o de entrega/i
+];
+
+export function ehEntrega(subject) {
+  const s = (subject || '').trim();
+  if (!s) return false;
+  if (PADROES_NAO_ENTREGA.some(rx => rx.test(s))) return false;
+  return PADROES_ENTREGA.some(rx => rx.test(s));
+}
+
+// Retorna { pedido_loja, nome, foto_url } para casar com um pedido existente,
+// ou null se o e-mail não for uma confirmação de entrega utilizável.
+export function parsearEntrega(loja, { subject, html, text }) {
+  if (!ehEntrega(subject)) return null;
+  // mailparser devolve html === false quando o e-mail é só texto
+  html = html || '';
+  text = text || '';
+  const subj = subject || '';
+  const txt = textoLimpo(html, text);
+  const pipe = textoPipe(html);
+
+  // nº do pedido na loja: assunto primeiro, corpo depois.
+  // O limite de 4 caracteres cobre Shopify (#1001) sem pegar tamanho/quantidade.
+  const pedido_loja = extrairNumeroPedidoGenerico(subj, html)
+    || (subj.match(/#\s*([0-9A-Z][0-9A-Z-]{3,})/i) || [])[1]
+    || (txt.match(/\border\s*#\s*([0-9A-Z][0-9A-Z-]{3,})\b/i) || [])[1]
+    || null;
+
+  // nome do produto: usado como fallback quando a loja não repete o nº do pedido
+  // no e-mail de entrega (caso do StockX).
+  let nome = null;
+  if (loja === 'StockX') {
+    nome = subj.replace(/^.*?\bdelivered\b\s*:?\s*/i, '').trim() || null;
+    if (nome && /^your order/i.test(nome)) nome = null; // assunto genérico, sem produto
+  }
+  if (!nome) {
+    nome = ((pipe.match(/You ordered the ([^|]{5,120}?)\s*\|/) || [])[1] || '').trim() || null;
+  }
+
+  // foto real do produto (StockX/GOAT mandam a imagem nesses e-mails)
+  const foto_url = (html.match(/<img[^>]+src="(https:\/\/(?:images\.stockx\.com|image\.goat\.com)\/[^"]+)"/) || [])[1] || null;
+
+  if (!pedido_loja && !nome) return null;
+  return { pedido_loja, nome, foto_url };
 }
 
 // ── PONTO DE ENTRADA ──
