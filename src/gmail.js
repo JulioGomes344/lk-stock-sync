@@ -17,7 +17,7 @@
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import * as store from './store.js';
-import { identificarLoja, parsearEmail, parsearCancelamento, ehConfirmacao, extrairNumeroPedidoGenerico, DOMINIOS, urlFotoStockX, parseEnvioStockX } from './parsers.js';
+import { identificarLoja, parsearEmail, parsearCancelamento, parsearEntrega, ehConfirmacao, extrairNumeroPedidoGenerico, DOMINIOS, urlFotoStockX, parseEnvioStockX } from './parsers.js';
 
 const DIAS = parseInt(process.env.GMAIL_DIAS || '30');
 // Data de corte fixa (opcional): GMAIL_DESDE=2026-06-11 ignora qualquer e-mail
@@ -131,7 +131,31 @@ async function sincronizarContaGmail(conta) {
               continue;
             }
 
-            // StockX Shipped/Delivered: enriquece pedido existente com a foto real
+            // ── ENTREGA: move Pendente → Recebido ──
+            // O e-mail de entrega da loja é a fonte de verdade do recebimento
+            // no endereço do freight forwarder. Nunca cria pedido.
+            const entrega = parsearEntrega(loja, { subject: mail.subject, html: mail.html, text: mail.text });
+            if (entrega) {
+              // aproveita a foto real do produto, que costuma vir nesses e-mails
+              if (entrega.foto_url && entrega.pedido_loja) {
+                store.anexarFotoPorPedidoLoja(loja, entrega.pedido_loja, entrega.foto_url);
+              }
+              const r = store.marcarRecebidoPorEmail(loja, entrega);
+              const ref = entrega.pedido_loja ? '#' + entrega.pedido_loja : `"${entrega.nome}"`;
+              if (r.atualizado) {
+                resultado.recebidos = (resultado.recebidos || 0) + 1;
+                console.log(`✓ [gmail:${conta.label}] entrega ${loja} ${ref} → pedido #${r.pedido.numero_pedido} movido para Recebido`);
+              } else if (r.motivo === 'pedido_nao_encontrado') {
+                resultado.entregasSemPedido = (resultado.entregasSemPedido || 0) + 1;
+                console.log(`⚠ [gmail:${conta.label}] entrega ${loja} ${ref} sem pedido correspondente — conferir manualmente`);
+              } else {
+                console.log(`· [gmail:${conta.label}] entrega ${loja} ${ref} ignorada (pedido ${r.motivo?.replace('ja_', 'já ')})`);
+              }
+              resultado.ignorados++;
+              continue;
+            }
+
+            // StockX Shipped: enriquece pedido existente com a foto real
             if (loja === 'StockX') {
               const envio = parseEnvioStockX({ subject: mail.subject, html: mail.html });
               if (envio) {
@@ -231,6 +255,8 @@ export async function sincronizarGmail() {
     final.processados += r.processados || 0;
     final.criados += r.criados || 0;
     final.ignorados += r.ignorados || 0;
+    if (r.recebidos) final.recebidos = (final.recebidos || 0) + r.recebidos;
+    if (r.entregasSemPedido) final.entregasSemPedido = (final.entregasSemPedido || 0) + r.entregasSemPedido;
     if (r.cancelados) final.cancelados = (final.cancelados || 0) + r.cancelados;
     if (r.atualizados) final.atualizados = (final.atualizados || 0) + r.atualizados;
     if (!r.ok) final.ok = false;
